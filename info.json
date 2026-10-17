@@ -1,0 +1,12 @@
+{
+  "name": "my-mod-name",
+  "version": "0.0.0",
+  "title": "My Mod Title",
+  "author": "TDSrock",
+  "description": "Short description of what this mod does.",
+  "factorio_version": "2.0",
+  "dependencies": [
+    "base >= 2.0.0",
+    "? space-age"
+  ]
+}

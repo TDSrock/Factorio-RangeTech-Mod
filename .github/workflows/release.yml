@@ -1,0 +1,106 @@
+name: Release
+
+# Manual only: nothing is ever released unless you click "Run workflow" in the
+# Actions tab. Run it from master.
+#
+# A "version" here is a tag + GitHub Release. Not every version has to reach
+# the mod portal: tick "internal" for versions you keep to yourself. Those are
+# marked as pre-release, and the "Publish to Mod Portal" workflow skips
+# pre-releases when it picks the latest release.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Which version number to bump (Major.Minor.Release)'
+        type: choice
+        options: [release, minor, major]
+        default: release
+      internal:
+        description: 'Internal version: mark the GitHub Release as a pre-release (not picked by default for the mod portal)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Guard against a double click: releasing twice without changes in between.
+      - name: Ensure there is something to release
+        run: |
+          PREV=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+          if [[ -n "$PREV" && "$(git rev-list --count "${PREV}..HEAD")" -eq 0 ]]; then
+            echo "::error::No commits since ${PREV}; nothing to release."
+            exit 1
+          fi
+
+      - name: Bump version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          chmod +x scripts/bump_version.sh
+          scripts/bump_version.sh "$BUMP" >> "$GITHUB_OUTPUT"
+
+      # Changelog: generated from the commit messages (squash-merged PR titles)
+      # since the last version, unless changelog.txt already has a manual entry
+      # for this version (a manual entry always wins). Never blocks: problems
+      # become warnings.
+      - name: Generate changelog from commits
+        run: |
+          set +e
+          OUT=$(bash scripts/generate_changelog.sh "${{ steps.version.outputs.new_version }}" --write 2>&1)
+          RC=$?
+          echo "$OUT"
+          if [[ $RC -ne 0 ]]; then
+            echo "::warning title=Changelog::${OUT}"
+          fi
+          exit 0
+
+      # Non-blocking: warns if changelog.txt still has no entry for this version,
+      # or the entry lists no changes. To make this a hard gate, add `exit 1`
+      # inside the `if` block.
+      - name: Check changelog
+        run: |
+          if ! OUT=$(bash scripts/check_changelog.sh "${{ steps.version.outputs.new_version }}"); then
+            while IFS= read -r line; do
+              echo "::warning title=Changelog::${line}"
+            done <<< "$OUT"
+          fi
+
+      - name: Commit version bump and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add info.json
+          if [[ -f changelog.txt ]]; then git add changelog.txt; fi
+          git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }} [skip ci]"
+          git tag "v${{ steps.version.outputs.new_version }}"
+          git push origin master
+          git push origin "v${{ steps.version.outputs.new_version }}"
+
+      - name: Package mod
+        id: package
+        run: |
+          chmod +x scripts/package_mod.sh
+          scripts/package_mod.sh >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: "v${{ steps.version.outputs.new_version }}"
+          name: "v${{ steps.version.outputs.new_version }}"
+          prerelease: ${{ inputs.internal }}
+          files: "${{ steps.package.outputs.zip_name }}"
+
+      # Mod portal publishing is intentionally NOT automatic here.
+      # Use the "Publish to Mod Portal" workflow (Actions tab -> Run workflow)
+      # once you're ready to actually push a release live.

@@ -1,0 +1,59 @@
+name: Publish to Mod Portal
+
+# Manual gate: this only ever runs when you click "Run workflow" in the
+# Actions tab. It never fires automatically on a push.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (e.g. v0.0.2). Leave empty to use the latest non-pre-release (internal versions are skipped).'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Resolve tag to publish
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ -n "${{ github.event.inputs.tag }}" ]]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG=$(gh release list --exclude-pre-releases --limit 1 --json tagName -q '.[0].tagName')
+          fi
+          echo "Publishing tag: $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Download the release's zip asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ steps.tag.outputs.tag }}" --pattern '*.zip' --dir .
+
+      - name: Identify mod name and zip
+        id: mod
+        run: |
+          MOD_NAME=$(jq -r '.name' info.json)
+          ZIP_NAME=$(ls *.zip | head -n1)
+          echo "mod_name=$MOD_NAME" >> "$GITHUB_OUTPUT"
+          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to Factorio Mod Portal
+        env:
+          FACTORIO_API_KEY: ${{ secrets.FACTORIO_API_KEY }}
+        run: |
+          if [[ -z "${FACTORIO_API_KEY}" ]]; then
+            echo "FACTORIO_API_KEY secret is not set. Add it in Settings -> Secrets and variables -> Actions." >&2
+            exit 1
+          fi
+          chmod +x scripts/publish_mod_portal.sh
+          scripts/publish_mod_portal.sh "${{ steps.mod.outputs.mod_name }}" "${{ steps.mod.outputs.zip_name }}"

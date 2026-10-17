@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate info.json
+        run: |
+          jq empty info.json
+          echo "info.json is valid JSON"
+
+      - name: Dry-run package (does not publish anything)
+        run: |
+          chmod +x scripts/package_mod.sh
+          scripts/package_mod.sh
+
+      - name: Upload build artifact for inspection
+        uses: actions/upload-artifact@v6
+        with:
+          name: mod-zip-preview
+          path: "*.zip"

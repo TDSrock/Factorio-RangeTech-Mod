@@ -1,0 +1,16 @@
+-- Prototype stage entry point. Runs after every mod's settings stage, before
+-- data-updates.lua and data-final-fixes.lua.
+--
+-- Use this file to ADD new prototypes (items, recipes, entities, ...).
+-- Use data-final-fixes.lua instead when you need to MODIFY prototypes added by
+-- other mods, since it runs after all other mods have finished their data stage.
+--
+-- Space Age awareness: space-age is an OPTIONAL dependency in info.json
+-- ("? space-age"). Guard Space Age specific logic with:
+--
+--   if mods["space-age"] then
+--       -- Space Age only code
+--   end
+--
+-- If your mod strictly requires Space Age, change the dependency in info.json
+-- to a hard one ("space-age") and remove the guards.
