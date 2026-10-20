@@ -37,7 +37,7 @@ unknown, the main **damage type** it deals is used. Rules, first match wins:
 | Acid | modded turrets with acid/poison ammo or damage (acid throwers) |
 | Support | medic turrets that heal instead of damage |
 | Other | modded turrets that fit none of the above |
-| Ignored | artillery turrets, repair turrets, and turrets that other mods swap themselves. The mod does nothing with these |
+| Ignored | artillery turrets, and turrets that are not compatible with this mod (see below). The mod does nothing with these |
 
 Categories without any turret get no research. The rules and name fragments live in
 `lib/categories.lua`; supporting a new mod usually means adding one line there. Every decision and
@@ -51,6 +51,22 @@ Each category (except Ignored) gets its own chain of range researches:
   packs gradually until the last level needs the packs of the hardest turret in the category.
 - Every level costs more than the previous one (default: 100 packs, growing 1.5x per level).
 - Each level adds a flat number of tiles or a percentage of the turret's base range.
+
+## Modded turrets
+
+Turrets that this mod cannot work with are put in **Ignored** on purpose, with the reason stored
+and shown by `/rangetech` and in the log. Currently:
+
+- **Additional Turrets** (original and revived): the heavy howitzers (`at_A1_*`, `at_A2_*`), the
+  cannon/rocket turret (`at_CR_*`) and the laser/capsule turret (`at_LC_*`). Their script expands
+  one placed turret into several helper entities and fires the weapon itself, so a longer
+  prototype range and this mod's entity swapping do not apply. *Not compatible.*
+- **Repair turrets**: their reach is not a normal turret range.
+- **Universal Turret**: it swaps the turret's weapon type at runtime.
+
+Supported as normal turrets: the other Additional Turrets turrets (cannon, rocket, gatling,
+acid thrower, electron beam, advanced laser) and Rampant Arsenal (laser turrets are recognised as
+Laser, acid turrets as Acid, medic turrets as Support, capsule turrets as Grenade).
 
 ## Settings (startup)
 

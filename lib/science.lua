@@ -128,12 +128,53 @@ local function sorted_packs(set)
   return list
 end
 
-local function icons_of(tech)
-  if tech.icons then return table.deepcopy(tech.icons) end
-  if tech.icon then
-    return { { icon = tech.icon, icon_size = tech.icon_size or 256 } }
+-- Only official art is copied: a third-party mod's icon file may have the wrong size, and
+-- copying it would spread that mod's broken sprite to every research made here.
+local TRUSTED_PREFIXES = { "__base__/", "__space-age__/", "__quality__/", "__elevated-rails__/", "__core__/" }
+
+local function trusted_path(path)
+  for _, prefix in ipairs(TRUSTED_PREFIXES) do
+    if string.sub(path, 1, #prefix) == prefix then return true end
   end
+  return false
 end
+
+local function icons_of(tech)
+  local icons
+  if tech.icons then
+    icons = table.deepcopy(tech.icons)
+  elseif tech.icon then
+    icons = { { icon = tech.icon, icon_size = tech.icon_size } }
+  end
+  if not icons then return nil end
+  for _, layer in ipairs(icons) do
+    if type(layer.icon) ~= "string" or not trusted_path(layer.icon) then return nil end
+    -- A technology may declare icon_size once on itself instead of on every layer. The copy
+    -- is a different prototype, so the size has to travel with each layer. Without a known
+    -- size the icon is not used (a wrong size is a load error).
+    layer.icon_size = layer.icon_size or tech.icon_size
+    if not layer.icon_size then return nil end
+  end
+  return icons
+end
+
+-- Vanilla technologies whose icon suits a category, tried in order.
+local FALLBACK_TECHS = {
+  bullet = { "gun-turret" },
+  shotgun = { "military" },
+  cannon = { "tank", "military-2" },
+  railgun = { "railgun" },
+  grenade = { "military-2" },
+  missile = { "rocketry" },
+  flame = { "flamethrower" },
+  laser = { "laser-turret", "laser" },
+  electric = { "tesla-weapons", "laser-turret" },
+  cold = { "military-2" },
+  acid = { "military-3" },
+  support = { "military" },
+  other = { "military" },
+}
+local GENERIC_FALLBACKS = { "military", "military-2", "gun-turret" }
 
 ---------------------------------------------------------------------------
 -- Public
@@ -190,8 +231,18 @@ function M.plan(entries, level_count, cost)
       end
     end
   end
-  if not plan.icons and data.raw.technology["military"] then
-    plan.icons = icons_of(data.raw.technology["military"])
+  -- Fallback: a vanilla technology that fits the category.
+  if not plan.icons then
+    local candidates = {}
+    for _, name in ipairs(FALLBACK_TECHS[entries[1].category] or {}) do candidates[#candidates + 1] = name end
+    for _, name in ipairs(GENERIC_FALLBACKS) do candidates[#candidates + 1] = name end
+    for _, name in ipairs(candidates) do
+      local tech = data.raw.technology[name]
+      if tech then
+        plan.icons = icons_of(tech)
+        if plan.icons then break end
+      end
+    end
   end
 
   for level = 1, level_count do
