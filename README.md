@@ -1,11 +1,119 @@
-# My Mod Title
+# Range Tech
 
-Short description of what this mod does.
+Range research for **every** turret, in categories. Built to work with quality turrets and
+modded turrets, which is where similar mods tend to fall short.
+
+Factorio 2.0, Space Age supported (optional).
+
+## What it does
+
+Every turret is put into exactly one category, based on its **ammo type**. If the ammo type is
+unknown, the main **damage type** it deals is used. Rules, first match wins:
+
+1. Your override setting.
+2. Artillery turrets are always ignored.
+3. Explicit rules for specific modded turrets (e.g. repair turrets are ignored, their reach is not
+   a normal turret range).
+4. The ammo category: exact names first, then name fragments, so modded ammo categories such as
+   `my-mod-rocket` or `frost-shell` are recognised too. Generic vanilla categories that mods reuse
+   for other weapons (`electric` for lasers, `flamethrower` for acid throwers) are refined by the
+   damage type, which is read from the turret's projectiles, streams and beams.
+5. The main damage type, again exact names first, then fragments (cold/frost/cryo, acid/poison,
+   fire, laser, electric, ...).
+6. Otherwise `other`.
+
+| Category | Examples (vanilla / Space Age) |
+| --- | --- |
+| Bullet | gun turret |
+| Shotgun | shotgun-shell turrets from mods |
+| Cannon | cannon-shell turrets from mods |
+| Railgun | railgun turret |
+| Grenade | grenade turrets from mods |
+| Missile | rocket turret |
+| Flame | flamethrower turret |
+| Laser | laser turret |
+| Electric | tesla turret |
+| Cold | modded turrets with cold/frost/cryo ammo or damage |
+| Acid | modded turrets with acid/poison ammo or damage (acid throwers) |
+| Support | medic turrets that heal instead of damage |
+| Other | modded turrets that fit none of the above |
+| Ignored | artillery turrets, repair turrets, and turrets that other mods swap themselves. The mod does nothing with these |
+
+Categories without any turret get no research. The rules and name fragments live in
+`lib/categories.lua`; supporting a new mod usually means adding one line there. Every decision and
+its reason is written to `factorio-current.log` (lines starting with `[range-tech]`), including
+warnings for turrets that ended up in `other` because their ammo or damage type is unknown.
+
+Each category (except Ignored) gets its own chain of range researches:
+
+- The number of levels is a setting (default 5).
+- Level 1 needs the science packs of the category's easiest turret to unlock. Later levels add
+  packs gradually until the last level needs the packs of the hardest turret in the category.
+- Every level costs more than the previous one (default: 100 packs, growing 1.5x per level).
+- Each level adds a flat number of tiles or a percentage of the turret's base range.
+
+## Settings (startup)
+
+- **Preset**: `Percent` (+10% of base range per level, all categories), `Flat tiles` (+3 tiles per
+  level, all categories) or `Custom`. The individual "Custom" settings (levels, bonus type, bonus
+  amount per category, plus cost base, growth and research time) only apply to `Custom`.
+- **Category overrides**: move turrets between categories, e.g. `gun-turret=laser;
+  some-modded-turret=ignored`. Categories: `bullet`, `shotgun`, `cannon`, `railgun`, `grenade`, `missile`, `flame`, `laser`,
+  `electric`, `cold`, `acid`, `other`, `ignored`. Artillery turrets cannot be reassigned.
+
+Factorio cannot build a per-turret settings list (the settings stage runs before any turret
+exists), so overrides are one text setting. To see turret names and categories use the
+`/rangetech` command in game, or search `factorio-current.log` for `[range-tech]`.
+
+## Quality
+
+Quality is a property of the placed turret, not of the prototype. When research changes a
+turret, the replacement keeps its quality, ammo, fluids, health, kill counter and target
+priorities. The quality range bonus (+10% per quality level in the base game) applies on top of
+the researched range.
+
+## Blueprints, ghosts and construction bots
+
+The longer-range copies are an internal detail. Everything you carry around is the normal turret:
+
+- Items, mining and pipette always give the normal turret item.
+- **Blueprints** (copy, cut, new blueprints, re-selected contents, library records) are rewritten
+  to the normal turret names when they are made. They work with or without this mod, and
+  removing the mod never breaks a blueprint.
+- **Ghosts** from a blueprint are the normal turret, so construction bots build the normal turret
+  item. The moment it is built it is swapped for the copy that matches your research.
+- A turret that is destroyed leaves a ghost of its copy. It looks identical, bots build it from
+  the normal item, and it is rewritten to the normal name as soon as you blueprint it.
+
+Only a turret that is standing in the world is a copy (it has to be: the range is part of the
+prototype). Mods and tools that look for turrets by name will see the copy's name.
+
+## Removing the mod
+
+Copies that are standing in a save disappear when the mod is removed. Before removing it, run
+`/rangetech-revert` (admins only). It turns every turret back into its normal version and pauses
+range upgrades. `/rangetech-resume` turns upgrades back on.
+
+## How it works / limitations
+
+Factorio has no research effect for turret range (only for artillery), no aura that affects
+range, and scripts cannot make a turret shoot beyond its prototype range. So this mod creates
+hidden copies of each turret with a longer range (one per level) and swaps turrets for the right
+copy when research completes or a turret is built.
+
+- Copies are made in `data-final-fixes`. A mod that changes turrets *after* this mod in the same
+  stage will not be reflected in the copies. If that happens, adjust load order.
+- Changing the settings or the turret mods in an existing save replaces or removes the copies;
+  turrets are re-checked on configuration change.
+- Rewriting a blueprint rebuilds it. Wires to entities *outside* a cut selection are not kept for
+  the turrets in it, and other mods that read the blueprint mapping after this mod may find it
+  empty.
+- Technology icons are reused from the technologies that unlock the turrets.
 
 ## Requirements
 
 - Factorio 2.0+
-- Space Age (optional, remove or change if your mod needs it as a hard dependency)
+- Space Age (optional)
 
 ## Installation
 
@@ -16,40 +124,18 @@ install it directly through the in-game mod portal.
 
 ---
 
-## Using this template
+## Repo setup (one time)
 
-1. Create a new repo from this template.
-2. In `info.json`, set `name` (lowercase, dashes, no spaces), `title`,
-   `description`, `author` and `dependencies`.
-3. Add your Lua code. Common entry points:
-   - `settings.lua` / `settings-updates.lua` / `settings-final-fixes.lua`
-   - `data.lua` / `data-updates.lua` / `data-final-fixes.lua`
-   - `control.lua` (runtime scripting)
-4. Name PRs `type: description` for players (see "Changelog" below);
-   `changelog.txt` is generated from the merge message on release. Edit it
-   by hand only when you want to override that.
-5. Replace this README.
-6. Optionally add `thumbnail.png` (144x144) for the mod portal and
-   `locale/en/locale.cfg` for localised strings.
-7. Run `scripts/configure_repo.sh` once (needs the GitHub CLI, logged in
+1. Run `scripts/configure_repo.sh` once (needs the GitHub CLI, logged in
    with admin rights). It makes squash merge the only merge method, uses
-   the PR title as the commit message and deletes merged branches. These
-   settings are not copied from a template, so do this for every new repo.
-8. Add a `FACTORIO_API_KEY` secret in the repo's
+   the PR title as the commit message and deletes merged branches.
+2. Add a `FACTORIO_API_KEY` secret in the repo's
    Settings -> Secrets and variables -> Actions (create the key at
    factorio.com/profile).
-9. Submit the very first release to the mod portal manually; the Upload API
+3. Add `thumbnail.png` (144x144) to the repo root.
+4. Submit the very first release to the mod portal manually; the Upload API
    cannot create a new mod listing.
-
-### Dependencies cheat sheet
-
-| Syntax            | Meaning                                  |
-| ----------------- | ---------------------------------------- |
-| `"some-mod"`      | Hard dependency                          |
-| `"? some-mod"`    | Optional dependency (loads after it)     |
-| `"(?) some-mod"`  | Hidden optional dependency               |
-| `"! some-mod"`    | Incompatible                             |
-| `"~ some-mod"`    | Dependency without affecting load order  |
+5. Name PRs `type: description` for players (see "Changelog" below).
 
 ---
 
