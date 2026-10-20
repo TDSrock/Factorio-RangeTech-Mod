@@ -2,4 +2,11 @@
 Version: 0.0.1
 Date: 2026-10-17
   Features:
-    - Initial release.
+    - Range research for turrets, grouped into categories (bullet, shotgun, cannon, railgun, grenade, missile, flame, laser, electric, cold, acid, other) by ammo type, falling back to damage type. Modded ammo categories and damage types are recognised by name, and every decision is logged with its reason.
+    - Works with modded turrets (all ammo, electric and fluid turrets are detected automatically) and keeps the quality of upgraded turrets.
+    - Artillery turrets are ignored by default; any turret can be moved to another category or to "ignored" with a startup setting.
+    - Configurable number of levels, cost growth, research time, and flat or percentage range bonus per category.
+    - Presets: all percentage, all flat, or custom.
+    - /rangetech command lists the turrets per category and your research progress.
+    - Blueprints are always rewritten to the normal turret names, so they work with and without the mod.
+    - /rangetech-revert turns every turret back into its normal version (run it before removing the mod), /rangetech-resume turns range upgrades back on.

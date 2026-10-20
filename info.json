@@ -1,9 +1,9 @@
 {
-  "name": "my-mod-name",
+  "name": "range-tech",
   "version": "0.0.0",
-  "title": "My Mod Title",
+  "title": "Range Tech",
   "author": "TDSrock",
-  "description": "Short description of what this mod does.",
+  "description": "Range research for every turret, grouped into categories by ammo or damage type. Works with quality turrets and modded turrets, with configurable levels, costs and presets.",
   "factorio_version": "2.0",
   "dependencies": [
     "base >= 2.0.0",
