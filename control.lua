@@ -11,6 +11,7 @@ local function get_config()
     config.categories = config.categories or {}
     config.techs = config.techs or {}
     config.classification = config.classification or {}
+    config.reasons = config.reasons or {}
     config.warnings = config.warnings or {}
   end
   return config
@@ -325,17 +326,24 @@ commands.add_command("rangetech", { "rangetech.command-help" }, function(command
       end
       say(line)
 
-      local list = { "" }
-      for i, name in ipairs(names) do
-        if i > 1 then list[#list + 1] = ", " end
-        list[#list + 1] = turret_name(name)
-        list[#list + 1] = " (" .. name .. ")"
-        if #list >= 18 then
-          say(list)
-          list = { "" }
+      if category == "ignored" then
+        -- One line per ignored turret, with the reason it is ignored.
+        for _, name in ipairs(names) do
+          say({ "", "  ", turret_name(name), " (" .. name .. "): ", cfg.reasons[name] or "" })
         end
+      else
+        local list = { "" }
+        for i, name in ipairs(names) do
+          if i > 1 then list[#list + 1] = ", " end
+          list[#list + 1] = turret_name(name)
+          list[#list + 1] = " (" .. name .. ")"
+          if #list >= 18 then
+            say(list)
+            list = { "" }
+          end
+        end
+        if #list > 1 then say(list) end
       end
-      if #list > 1 then say(list) end
     end
   end
 
