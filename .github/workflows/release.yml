@@ -1,12 +1,14 @@
 name: Release
 
-# Manual only: nothing is ever released unless you click "Run workflow" in the
-# Actions tab. Run it from master.
+# Manual only: nothing is released unless you click "Run workflow" in the Actions tab.
+# Run it from master.
 #
-# A "version" here is a tag + GitHub Release. Not every version has to reach
-# the mod portal: tick "internal" for versions you keep to yourself. Those are
-# marked as pre-release, and the "Publish to Mod Portal" workflow skips
-# pre-releases when it picks the latest release.
+# A "version" here is a tag + GitHub Release. Not every version has to reach the mod portal:
+# tick "internal" for versions you keep to yourself. Those are marked as pre-release, and the
+# "Publish to Mod Portal" workflow skips pre-releases when it picks the latest release.
+#
+# The changelog is built from the "Changelog:" sections of the pull requests merged since the last
+# release (see scripts/changelog.py). The date is filled in automatically.
 on:
   workflow_dispatch:
     inputs:
@@ -22,6 +24,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
   release:
@@ -50,31 +53,28 @@ jobs:
           chmod +x scripts/bump_version.sh
           scripts/bump_version.sh "$BUMP" >> "$GITHUB_OUTPUT"
 
-      # Changelog: generated from the commit messages (squash-merged PR titles)
-      # since the last version, unless changelog.txt already has a manual entry
-      # for this version (a manual entry always wins). Never blocks: problems
-      # become warnings.
-      - name: Generate changelog from commits
+      # Collects the Changelog sections of the merged PRs and writes the new version section in the
+      # official format. A section for this version that is already at the top of changelog.txt
+      # (written by hand) is kept as it is. Nothing is committed or tagged if this fails.
+      - name: Generate changelog from pull requests
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set +e
-          OUT=$(bash scripts/generate_changelog.sh "${{ steps.version.outputs.new_version }}" --write 2>&1)
+          OUT=$(python3 scripts/changelog.py release --version "${{ steps.version.outputs.new_version }}" --repo "${{ github.repository }}" --write 2>&1)
           RC=$?
           echo "$OUT"
+          # Pull requests without a Changelog section are listed as warnings in the output.
+          while IFS= read -r line; do
+            if [[ "$line" == WARNING:* ]]; then echo "::warning title=Changelog::${line#WARNING: }"; fi
+          done <<< "$OUT"
           if [[ $RC -ne 0 ]]; then
-            echo "::warning title=Changelog::${OUT}"
+            echo "::error title=Changelog::The changelog could not be generated (exit code ${RC}); see the log. Nothing was released."
+            exit 1
           fi
-          exit 0
 
-      # Non-blocking: warns if changelog.txt still has no entry for this version,
-      # or the entry lists no changes. To make this a hard gate, add `exit 1`
-      # inside the `if` block.
-      - name: Check changelog
-        run: |
-          if ! OUT=$(bash scripts/check_changelog.sh "${{ steps.version.outputs.new_version }}"); then
-            while IFS= read -r line; do
-              echo "::warning title=Changelog::${line}"
-            done <<< "$OUT"
-          fi
+      - name: Check changelog format
+        run: python3 scripts/changelog.py validate --expect-version "${{ steps.version.outputs.new_version }}"
 
       - name: Commit version bump and tag
         run: |
@@ -93,11 +93,15 @@ jobs:
           chmod +x scripts/package_mod.sh
           scripts/package_mod.sh >> "$GITHUB_OUTPUT"
 
+      - name: Release notes from the changelog
+        run: python3 scripts/changelog.py notes --version "${{ steps.version.outputs.new_version }}" > release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: "v${{ steps.version.outputs.new_version }}"
           name: "v${{ steps.version.outputs.new_version }}"
+          body_path: release-notes.md
           prerelease: ${{ inputs.internal }}
           files: "${{ steps.package.outputs.zip_name }}"
 

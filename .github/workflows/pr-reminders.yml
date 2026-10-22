@@ -6,7 +6,7 @@ name: PR Reminders
 on:
   pull_request:
     branches: [master]
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
@@ -20,10 +20,6 @@ jobs:
 
       - name: Build reminder
         id: check
-        env:
-          # Passed via env (never interpolated into the script) so odd characters
-          # in a title cannot break or inject into the shell.
-          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           chmod +x scripts/check_optional_files.sh
           scripts/check_optional_files.sh reminder.md >> "$GITHUB_OUTPUT"

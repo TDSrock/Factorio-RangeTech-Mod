@@ -203,7 +203,8 @@ install it directly through the in-game mod portal.
 4. The `FACTORIO_API_KEY` needs the "ModPortal: Upload Mods" usage and, so the
    very first release can create the mod listing, also "ModPortal: Publish
    Mods" (both are chosen when creating the key on factorio.com/profile).
-5. Name PRs `type: description` for players (see "Changelog" below).
+5. Every PR needs a `Changelog:` section in its description (see "PR
+   Changelog" below).
 
 ---
 
@@ -217,7 +218,9 @@ release is a tag you create deliberately with the **Release** button.
 
 ### CI (PRs into `master`, pushes to `master`)
 
-Validates `info.json` and does a dry-run package build. Does not publish
+Validates `info.json`, `changelog.txt` (against the
+[official changelog format](https://lua-api.factorio.com/latest/auxiliary/changelog-format.html))
+and the mod's own images, and does a dry-run package build. Does not publish
 anything. The built zip is attached as a workflow artifact for inspection.
 
 ### PR reminders (PRs into `master`) -- non-blocking
@@ -230,8 +233,8 @@ with links to the relevant docs. Currently checked:
 - `locale/en/locale.cfg`
 - leftover template placeholders in `info.json`
 - the template's "Using this template" section still in `README.md`
-- the PR title: a changelog preview, or a warning if it has no `type:` prefix
-  (see "Changelog" below), or confirmation of a manual changelog entry
+- the optional `portal-description.md`
+- the optional `graphics/range-overlay.png` range symbol
 
 It never fails the build. If everything is in place and no comment exists
 yet, it stays quiet. PRs from forks cannot receive comments; the same
@@ -240,54 +243,72 @@ reminder is then shown in the run's summary instead.
 To change what is checked, edit `scripts/check_optional_files.sh` (the
 workflow itself is `.github/workflows/pr-reminders.yml`).
 
-### Changelog (auto-generated, manual override possible)
+### PR Changelog (PRs into `master`) -- required
 
-When you run the Release workflow, `changelog.txt` is generated from the
-commit messages since the last `v*` tag, unless you already wrote an entry
-yourself.
+Every pull request description must contain a line that reads `Changelog:`,
+followed by the changes of that PR. The **PR Changelog** workflow fails when
+the section is missing or invalid, keeps one comment on the PR up to date
+(with a preview of the exact lines that will end up in `changelog.txt`), and
+re-runs when the description is edited. A PR template pre-fills the section.
+To make the check required, add it to the branch protection / ruleset of
+`master`.
 
-**The merge message is what counts.** The pipeline reads the commit subjects
-on `master`. Merging is squash-only (set up by `scripts/configure_repo.sh`),
-and the squash commit subject is the **PR title**, so name PRs
-`type: description`, written for players. The commits inside the PR are not
-used.
+```
+Changelog:
+Features:
+- A single line entry.
+- A multi-line entry continues on the next line
+  without a new dash.
+Bugfixes:
+- Fixed something that was broken.
+```
 
-**Prefixes** (optional scope, e.g. `fix(gui): ...`):
+- Categories are the ones the game recognises: Major Features, Features,
+  Minor Features, Graphics, Sounds, Optimizations, Balancing, Combat
+  Balancing, Circuit Network, Changes, Bugfixes, Modding, Scripting, Gui,
+  Control, Translation, Debug, Ease of use, Info, Locale, Compatibility.
+  Matching ignores case. Use as many as the change needs.
+- Every entry sits under a category. Use a multi-line entry when one line
+  does not explain the change.
+- Write `Changelog: none` for changes players do not care about (CI, docs,
+  refactoring). It is a deliberate choice, so a PR cannot forget it.
+- Markdown decoration (`## Changelog:`, `**Features:**`, `*` bullets) is
+  accepted, and HTML comments are ignored.
 
-| Prefix                                                       | Changelog category        |
-| ------------------------------------------------------------ | ------------------------- |
-| `feat:`                                                      | Features                  |
-| `fix:`                                                       | Bugfixes                  |
-| `perf:`                                                      | Optimizations             |
-| `balance:`                                                   | Balancing                 |
-| `info:`                                                      | Info                      |
-| `chore:` `ci:` `docs:` `test:` `build:` `style:` `refactor:` | kept out of the changelog |
-| no prefix / unknown prefix                                   | kept out of the changelog |
+The parser writes the entries in the exact format of the game: 99 dashes, the
+version, the date, categories with 2 spaces, entries with 4 spaces and `- `,
+continuation lines with 6 spaces, no duplicates, no tabs or trailing
+whitespace. You never format that yourself.
 
-Also skipped: merge commits, the pipeline's own version-bump commits, and
-any commit with `[skip changelog]` in the subject. A trailing `(#123)` PR
-reference is stripped from the text.
+### Changelog (built from the pull requests)
 
-**Manual override:** add an entry at the top of `changelog.txt` for the
+When you run the Release workflow, `scripts/changelog.py` collects the
+`Changelog:` sections of all PRs merged since the last `v*` tag (read through
+the GitHub API, falling back to the commit message, which holds the PR
+description for squash merges) and writes the new version section at the top
+of `changelog.txt`. Identical entries from different PRs are merged. The
+**date is filled in automatically**, in the style of the official example
+(`DD. MM. YYYY`). The same entries become the notes of the GitHub release.
+
+The release **fails before anything is committed or tagged** if no entries
+were found or the result would not follow the format. PRs that were merged
+without a `Changelog:` section are listed as warnings.
+
+**Manual override:** add a section at the top of `changelog.txt` for the
 version the release will become (you choose the bump when you click Release,
 so it is only known then). If the top entry already has that version, the
 generator leaves it untouched. If your top entry is a *different, newer*
 version than the release (e.g. you wrote `0.1.0` but the bump produced
-`0.0.5`), generation is refused with a warning so the file stays in order.
+`0.0.5`), generation is refused so the file stays in order. Every version
+needs a `Date:` line and at least one entry.
 
 **Internal versions:** every version gets its own changelog entry, whether or
 not it ever reaches the mod portal. Entries and published versions don't
 have to line up 1:1. When you publish a later version, the portal simply
 shows the entries of the internal versions in between as well.
 
-**Feedback:** the PR reminder comment checks the PR title (it re-runs when
-you rename the PR). It shows a collapsed preview of the changelog line the
-title will generate, or a non-blocking warning when the title has no
-prefix, so a player-relevant change doesn't silently miss the changelog.
-Internal prefixes (`chore:` etc.) only get a neutral note. On release, a
-warning annotation appears if there is still no entry with changes for the
-new version, e.g. when every commit was internal. Nothing here blocks a
-merge or a release.
+`python3 scripts/changelog.py` has four commands: `check-pr`, `validate`,
+`release` and `notes` (see `--help`); it needs nothing but Python 3.
 
 The template starts at `0.0.0` in `info.json` with a manual `0.0.1` entry, so
 the first release (bump `release`) lands on `0.0.1` and keeps that entry.
@@ -308,12 +329,14 @@ The workflow then:
 1. Stops if there are no commits since the last tag (guards against a double
    click).
 2. Bumps the version in `info.json`.
-3. Generates the changelog entry from commit messages (unless a manual
-   entry exists), commits `info.json` and `changelog.txt` back to `master`
-   and tags it `vX.Y.Z`.
+3. Generates the changelog entry from the PR changelog sections (unless a
+   manual entry exists), commits `info.json` and `changelog.txt` back to
+   `master` and tags it `vX.Y.Z`. It stops before this step if the changelog
+   cannot be generated.
 4. Packages the mod into `<mod-name>_X.Y.Z.zip` with the correct
    mod-portal folder structure.
-5. Creates a GitHub Release with that zip attached.
+5. Creates a GitHub Release with that zip attached and the changelog entry
+   as the release notes.
 
 The workflow pushes the version-bump commit directly to `master`. If you add
 branch protection that requires pull requests on `master`, that push will be

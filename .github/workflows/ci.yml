@@ -17,6 +17,9 @@ jobs:
           jq empty info.json
           echo "info.json is valid JSON"
 
+      - name: Validate changelog.txt against the official format
+        run: python3 scripts/changelog.py validate
+
       - name: Validate own image assets
         run: bash scripts/validate_assets.sh
 
