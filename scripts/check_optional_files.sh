@@ -80,6 +80,18 @@ else
   add_row 0 "\`locale/en/locale.cfg\`" "Localised names/descriptions for your prototypes and settings. Without it, players see raw internal names."
 fi
 
+# --- range overlay image (optional) --------------------------------------------
+overlay_enabled=$(grep -v '^[[:space:]]*--' lib/icons.lua 2>/dev/null | grep -c 'M\.CUSTOM_OVERLAY[[:space:]]*=[[:space:]]*"')
+if [[ -f graphics/range-overlay.png ]]; then
+  if [[ "$overlay_enabled" -gt 0 ]]; then
+    add_row 1 "\`graphics/range-overlay.png\`" "Present and enabled in \`lib/icons.lua\`. Size is checked by the CI asset validation."
+  else
+    add_row 0 "\`graphics/range-overlay.png\`" "Present but not enabled: set \`M.CUSTOM_OVERLAY\` in \`lib/icons.lua\`."
+  fi
+else
+  add_row 2 "\`graphics/range-overlay.png\`" "Optional own range symbol for the research icons (128x128 transparent PNG, see README). Until then the vanilla range symbol is used."
+fi
+
 # --- info.json placeholders --------------------------------------------------
 if grep -qE 'my-mod-name|My Mod Title|Short description of what this mod does' info.json 2>/dev/null; then
   add_row 0 "\`info.json\` placeholders" "Still contains template values (\`name\`, \`title\` or \`description\`)."

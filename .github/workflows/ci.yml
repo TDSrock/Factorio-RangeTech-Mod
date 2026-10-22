@@ -17,6 +17,9 @@ jobs:
           jq empty info.json
           echo "info.json is valid JSON"
 
+      - name: Validate own image assets
+        run: bash scripts/validate_assets.sh
+
       - name: Dry-run package (does not publish anything)
         run: |
           chmod +x scripts/package_mod.sh

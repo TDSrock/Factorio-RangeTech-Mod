@@ -6,6 +6,8 @@
 --   * levels in between add the missing packs gradually (cheapest pack first).
 local M = {}
 
+local icons = require("lib.icons")
+
 local FALLBACK_PACK = "automation-science-pack"
 
 ---------------------------------------------------------------------------
@@ -116,46 +118,34 @@ end
 -- Pack ordering
 ---------------------------------------------------------------------------
 
+-- Science packs are plain items from Factorio 2.1 on (before that they were "tool" prototypes), so
+-- a pack is looked up in every item type instead of only in data.raw.tool.
+local pack_order_cache = {}
+
+local function pack_order(name)
+  local cached = pack_order_cache[name]
+  if cached ~= nil then return cached end
+  local order = "zzz"
+  for type_name in pairs(defines.prototypes["item"]) do
+    local proto = data.raw[type_name] and data.raw[type_name][name]
+    if proto then
+      order = proto.order or "zzz"
+      break
+    end
+  end
+  pack_order_cache[name] = order
+  return order
+end
+
 local function sorted_packs(set)
   local list = {}
   for pack in pairs(set) do list[#list + 1] = pack end
   table.sort(list, function(a, b)
-    local oa = (data.raw.tool[a] and data.raw.tool[a].order) or "zzz"
-    local ob = (data.raw.tool[b] and data.raw.tool[b].order) or "zzz"
+    local oa, ob = pack_order(a), pack_order(b)
     if oa ~= ob then return oa < ob end
     return a < b
   end)
   return list
-end
-
--- Only official art is copied: a third-party mod's icon file may have the wrong size, and
--- copying it would spread that mod's broken sprite to every research made here.
-local TRUSTED_PREFIXES = { "__base__/", "__space-age__/", "__quality__/", "__elevated-rails__/", "__core__/" }
-
-local function trusted_path(path)
-  for _, prefix in ipairs(TRUSTED_PREFIXES) do
-    if string.sub(path, 1, #prefix) == prefix then return true end
-  end
-  return false
-end
-
-local function icons_of(tech)
-  local icons
-  if tech.icons then
-    icons = table.deepcopy(tech.icons)
-  elseif tech.icon then
-    icons = { { icon = tech.icon, icon_size = tech.icon_size } }
-  end
-  if not icons then return nil end
-  for _, layer in ipairs(icons) do
-    if type(layer.icon) ~= "string" or not trusted_path(layer.icon) then return nil end
-    -- A technology may declare icon_size once on itself instead of on every layer. The copy
-    -- is a different prototype, so the size has to travel with each layer. Without a known
-    -- size the icon is not used (a wrong size is a load error).
-    layer.icon_size = layer.icon_size or tech.icon_size
-    if not layer.icon_size then return nil end
-  end
-  return icons
 end
 
 -- Vanilla technologies whose icon suits a category, tried in order.
@@ -181,8 +171,9 @@ local GENERIC_FALLBACKS = { "military", "military-2", "gun-turret" }
 ---------------------------------------------------------------------------
 
 -- entries: list of { proto, item, category } of ONE category.
+-- official_only: only copy icons from official (vanilla / DLC) art, never from other mods.
 -- Returns { icons = ..., unlock_prerequisite = tech name or nil, levels = { [n] = { packs, prerequisites, count, time } } }
-function M.plan(entries, level_count, cost)
+function M.plan(entries, level_count, cost, official_only)
   -- Per turret: unlock tech and pack set.
   local infos = {}
   for _, entry in ipairs(entries) do
@@ -221,12 +212,13 @@ function M.plan(entries, level_count, cost)
   local plan = { levels = {} }
   plan.unlock_prerequisite = easiest.tech and easiest.tech.name or nil
 
-  -- Icon: unlock tech of the easiest turret, else of any turret in the category.
-  if easiest.tech then plan.icons = icons_of(easiest.tech) end
+  -- Icon: unlock tech of the easiest turret, else of any turret in the category. The layers are
+  -- validated (lib/icons.lua); anything doubtful falls through to a vanilla icon.
+  if easiest.tech then plan.icons = icons.from_tech(easiest.tech, official_only) end
   if not plan.icons then
     for _, info in ipairs(infos) do
       if info.tech then
-        plan.icons = icons_of(info.tech)
+        plan.icons = icons.from_tech(info.tech, official_only)
         if plan.icons then break end
       end
     end
@@ -239,7 +231,7 @@ function M.plan(entries, level_count, cost)
     for _, name in ipairs(candidates) do
       local tech = data.raw.technology[name]
       if tech then
-        plan.icons = icons_of(tech)
+        plan.icons = icons.from_tech(tech, true)
         if plan.icons then break end
       end
     end

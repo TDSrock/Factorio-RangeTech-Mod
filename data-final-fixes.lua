@@ -8,6 +8,7 @@ local categories = require("lib.categories")
 local config = require("lib.config").load()
 local classify = require("lib.classify")
 local science = require("lib.science")
+local icon_lib = require("lib.icons")
 
 local PREFIX = categories.PREFIX
 local warnings = config.warnings
@@ -49,6 +50,7 @@ local mod_data = {
   variants = {},      -- variant name -> { base, level }
   categories = {},    -- category -> { levels, tech_prefix, mode, amount }
   techs = {},         -- technology name -> category
+  plans = {},         -- category -> list of { level, count, time, packs } for the report
   classification = classification,
   reasons = reasons,
   warnings = warnings,
@@ -60,7 +62,7 @@ for _, category in ipairs(categories.IDS) do
   local cfg = config.categories[category]
 
   if list and #list > 0 and cfg.levels and cfg.levels > 0 then
-    local plan = science.plan(list, cfg.levels, config.cost)
+    local plan = science.plan(list, cfg.levels, config.cost, config.icon_official_only)
 
     if not plan.icons then
       warnings[#warnings + 1] = "No technology icon found for category '" .. category .. "', no research created."
@@ -72,7 +74,11 @@ for _, category in ipairs(categories.IDS) do
         local base = entry.proto
         local group = base.fast_replaceable_group or (PREFIX .. base.name)
         base.fast_replaceable_group = group
-        mod_data.turrets[base.name] = { category = category }
+        mod_data.turrets[base.name] = {
+          category = category,
+          base_range = base.attack_parameters.range,
+          ranges = {},    -- range per level, for the report
+        }
 
         for level = 1, cfg.levels do
           local variant = table.deepcopy(base)
@@ -92,6 +98,7 @@ for _, category in ipairs(categories.IDS) do
           end
 
           mod_data.variants[variant.name] = { base = base.name, level = level }
+          mod_data.turrets[base.name].ranges[level] = range
           new_prototypes[#new_prototypes + 1] = variant
         end
       end
@@ -122,7 +129,7 @@ for _, category in ipairs(categories.IDS) do
           name = tech_name,
           localised_name = { "rangetech.tech-name", category_name, tostring(level) },
           localised_description = { "", effect, "\n", { "rangetech.affects", affects } },
-          icons = table.deepcopy(plan.icons),
+          icons = icon_lib.compose(plan.icons),
           effects = { { type = "nothing", effect_description = effect } },
           prerequisites = prerequisites,
           unit = {
@@ -134,6 +141,16 @@ for _, category in ipairs(categories.IDS) do
           order = "e-z[rangetech]-" .. category .. "-" .. string.format("%03d", level),
         }
         mod_data.techs[tech_name] = category
+
+        local packs = {}
+        for _, ingredient in ipairs(level_plan.ingredients) do packs[#packs + 1] = ingredient[1] end
+        mod_data.plans[category] = mod_data.plans[category] or {}
+        table.insert(mod_data.plans[category], {
+          level = level,
+          count = level_plan.count,
+          time = level_plan.time,
+          packs = packs,
+        })
       end
 
       data:extend(new_prototypes)

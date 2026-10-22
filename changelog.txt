@@ -1,12 +1,28 @@
 ---------------------------------------------------------------------------------------------------
-Version: 0.0.1
-Date: 2026-10-17
+Version: 0.1.1
+Date: 22. 10. 2026
   Features:
-    - Range research for turrets, grouped into categories (bullet, shotgun, cannon, railgun, grenade, missile, flame, laser, electric, cold, acid, other) by ammo type, falling back to damage type. Modded ammo categories and damage types are recognised by name, and every decision is logged with its reason.
+    - Every range research now shows the small range symbol that vanilla puts on the artillery range research. The symbol is read from vanilla itself, so no image path is hardcoded. An own symbol can be added as graphics/range-overlay.png (128x128, transparent PNG) and enabled in lib/icons.lua.
+    - New startup setting "Technology icons": Auto reuses the icon of the technology that unlocks the turret (checked for obvious problems, with a vanilla icon as fallback), Built-in only uses vanilla icons.
+    - /range-tech (or /rangetech) shows your research per category and writes a full report (settings, turrets per category with ranges per level and the reason for their category, why ignored turrets are ignored, the research plan) to script-output/range-tech-report.txt.
+    - Turrets that a script places without raising a build event are now upgraded by a periodic sweep. New runtime setting "Upgrade sweep interval" (default 10 seconds, 0 = off).
+    - /range-tech-prep-uninstall turns every turret back into its normal version and pauses upgrades, also after saving and loading. Run it before removing the mod. /range-tech-resume turns upgrades back on and upgrades every turret that is not at its research level yet. These replace /rangetech-revert and /rangetech-resume.
+  Compatibility:
+    - Updated for Factorio 2.1. Fluid turrets keep their fluid when upgraded through the new 2.1 fluid functions (2.0 is still handled), and science packs, which are plain items in 2.1, are found for the research costs.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.0
+Date: 21. 10. 2026
+  Bugfixes:
+    - Fixed a crash while loading caused by the research icons. The icon of the technology that unlocks a turret was copied without its icon size, so the game tried to draw a small image at a much larger size. Icons are now copied with their size, and anything doubtful falls back to a vanilla icon.
+---------------------------------------------------------------------------------------------------
+Version: 0.0.1
+Date: 17. 10. 2026
+  Features:
+    - Range research for turrets, grouped into categories (bullet, shotgun, cannon, railgun, grenade, missile, flame, laser, electric, cold, acid, support, other) by ammo type, falling back to damage type. Modded ammo categories and damage types are recognised by name, and every decision is logged with its reason.
     - Works with modded turrets (all ammo, electric and fluid turrets are detected automatically) and keeps the quality of upgraded turrets.
-    - Artillery turrets are ignored by default; any turret can be moved to another category or to "ignored" with a startup setting.
+    - Artillery turrets are ignored by default, as are turrets that are not compatible with this mod (such as the scripted turrets of Additional Turrets), with the reason shown. Any turret can be moved to another category or to "ignored" with a startup setting.
     - Configurable number of levels, cost growth, research time, and flat or percentage range bonus per category.
     - Presets: all percentage, all flat, or custom.
-    - /rangetech command lists the turrets per category and your research progress.
     - Blueprints are always rewritten to the normal turret names, so they work with and without the mod.
+    - /rangetech lists the turrets per category and your research progress.
     - /rangetech-revert turns every turret back into its normal version (run it before removing the mod), /rangetech-resume turns range upgrades back on.

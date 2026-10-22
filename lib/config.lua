@@ -39,6 +39,9 @@ function M.load()
   local config = { preset = preset, categories = {}, warnings = warnings }
 
   config.overrides = parse_overrides(value("rangetech-overrides"), warnings)
+  -- "builtin": only ever use vanilla art for technology icons. "auto": copy the icon of the
+  -- technology that unlocks the turret when it passes the checks in lib/icons.lua.
+  config.icon_official_only = (value("rangetech-icon-source") == "builtin")
 
   if preset == "custom" then
     for _, id in ipairs(categories.IDS) do

@@ -18,6 +18,7 @@ rsync -a \
   --exclude='scripts' \
   --exclude='*.zip' \
   --exclude='.gitignore' \
+  --exclude='portal-description.md' \
   ./ "$TARGET_DIR"/
 
 (cd "$STAGE_DIR" && zip -r -q "${ZIP_NAME}" "${MOD_NAME}_${VERSION}")

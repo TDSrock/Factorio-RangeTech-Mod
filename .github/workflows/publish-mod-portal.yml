@@ -2,11 +2,30 @@ name: Publish to Mod Portal
 
 # Manual gate: this only ever runs when you click "Run workflow" in the
 # Actions tab. It never fires automatically on a push.
+#
+# It first tries the normal way (add a release to an existing mod). If the mod does not exist
+# on the portal yet, it publishes it as a NEW mod (unless you untick the option below).
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to publish (e.g. v0.0.2). Leave empty to use the latest non-pre-release (internal versions are skipped).'
+        description: 'Release tag to publish (e.g. v0.1.4). Leave empty to use the latest non-pre-release (internal versions are skipped).'
+        required: false
+        default: ''
+      new_mod_fallback:
+        description: 'If the mod does not exist on the portal yet, publish it as a NEW mod (needs an API key with the "Publish Mods" usage).'
+        type: boolean
+        default: true
+      category:
+        description: 'New mod only: portal category (e.g. content, tweaks, utilities). Empty = portal default.'
+        required: false
+        default: ''
+      license:
+        description: 'New mod only: license id. Empty = portal default.'
+        required: false
+        default: ''
+      source_url:
+        description: 'New mod only: source code URL. Empty = this repository.'
         required: false
         default: ''
 
@@ -24,9 +43,10 @@ jobs:
         id: tag
         env:
           GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [[ -n "${{ github.event.inputs.tag }}" ]]; then
-            TAG="${{ github.event.inputs.tag }}"
+          if [[ -n "$INPUT_TAG" ]]; then
+            TAG="$INPUT_TAG"
           else
             TAG=$(gh release list --exclude-pre-releases --limit 1 --json tagName -q '.[0].tagName')
           fi
@@ -50,6 +70,11 @@ jobs:
       - name: Publish to Factorio Mod Portal
         env:
           FACTORIO_API_KEY: ${{ secrets.FACTORIO_API_KEY }}
+          NEW_MOD_FALLBACK: ${{ inputs.new_mod_fallback }}
+          MOD_CATEGORY: ${{ inputs.category }}
+          MOD_LICENSE: ${{ inputs.license }}
+          MOD_SOURCE_URL: ${{ inputs.source_url != '' && inputs.source_url || format('https://github.com/{0}', github.repository) }}
+          MOD_DESCRIPTION_FILE: portal-description.md
         run: |
           if [[ -z "${FACTORIO_API_KEY}" ]]; then
             echo "FACTORIO_API_KEY secret is not set. Add it in Settings -> Secrets and variables -> Actions." >&2
