@@ -179,7 +179,8 @@ symbol. To use your own image:
 
 ## Requirements
 
-- Factorio 2.0+
+- Factorio 2.1+ (the code also copes with the 2.0 fluid API, but `info.json` targets 2.1, so
+  a 2.0 build needs `"factorio_version": "2.0"` and `base >= 2.0.0`)
 - Space Age (optional)
 
 ## Installation
