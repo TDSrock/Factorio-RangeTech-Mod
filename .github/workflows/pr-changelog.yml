@@ -1,0 +1,62 @@
+name: PR Changelog
+
+# The description of every pull request into master must contain a line that reads "Changelog:"
+# followed by the changes of the PR, in the format the game expects (categories and entries).
+# Write "Changelog: none" for changes that players do not care about.
+#
+# This check fails when the section is missing or invalid, and keeps ONE comment on the PR up to
+# date with what it found, including a preview of the lines that will end up in changelog.txt.
+# It re-runs whenever the description is edited. To make it required, add it to the branch
+# protection / ruleset of master.
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  changelog:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the Changelog section
+        id: check
+        env:
+          # Passed via env (never interpolated into the script) so odd characters in the
+          # description cannot break or inject into the shell.
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set +e
+          python3 scripts/changelog.py check-pr > changelog-report.md
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+          cat changelog-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      # continue-on-error: PRs from forks get a read-only token and cannot comment.
+      - name: Create or update PR comment
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          MARKER="<!-- changelog-check -->"
+          COMMENT_ID=$(gh api "repos/${REPO}/issues/${PR}/comments" --paginate \
+            --jq ".[] | select(.body | contains(\"${MARKER}\")) | .id" | head -n1)
+
+          if [[ -n "$COMMENT_ID" ]]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${COMMENT_ID}" -F body=@changelog-report.md > /dev/null
+            echo "Updated changelog comment ${COMMENT_ID}"
+          else
+            gh pr comment "$PR" --repo "$REPO" --body-file changelog-report.md
+            echo "Posted changelog comment"
+          fi
+
+      - name: Fail when the changelog section is missing or invalid
+        if: steps.check.outputs.rc != '0'
+        run: |
+          echo "::error title=Changelog::The pull request description needs a valid 'Changelog:' section (or 'Changelog: none'). See the comment on this PR or the job summary."
+          exit 1

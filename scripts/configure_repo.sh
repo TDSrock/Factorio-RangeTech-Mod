@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# One-time repo setup: enforce squash-only merging, with the PR title as the
-# commit message (the changelog is generated from it), and delete head
+# Squash-only merging, with the PR title as the commit subject and the PR description as the
+# commit body (so the "Changelog:" section is also kept in the git history), and delete head
 # branches after merge.
 #
 # Repo settings are NOT copied when you create a repo from a template, so run
@@ -20,7 +20,7 @@ gh api -X PATCH "repos/${REPO}" \
   -F allow_merge_commit=false \
   -F allow_rebase_merge=false \
   -f squash_merge_commit_title=PR_TITLE \
-  -f squash_merge_commit_message=BLANK \
+  -f squash_merge_commit_message=PR_BODY \
   -F delete_branch_on_merge=true \
   --jq '{allow_squash_merge, allow_merge_commit, allow_rebase_merge, squash_merge_commit_title, squash_merge_commit_message, delete_branch_on_merge}'
 

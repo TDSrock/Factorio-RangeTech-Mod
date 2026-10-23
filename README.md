@@ -107,8 +107,28 @@ prototype). Mods and tools that look for turrets by name will see the copy's nam
 ## Removing the mod
 
 Copies that are standing in a save disappear when the mod is removed. Before removing it, run
-`/rangetech-revert` (admins only). It turns every turret back into its normal version and pauses
-range upgrades. `/rangetech-resume` turns upgrades back on.
+`/range-tech-prep-uninstall` (admins only). It turns every turret back into its normal version and
+pauses range upgrades, also after saving and loading (players who join get a reminder).
+`/range-tech-resume` turns upgrades back on and upgrades every turret that is not at its research
+level yet.
+
+## Commands
+
+- `/range-tech` (or `/rangetech`): shows your research level per category and writes the full
+  details to `script-output/range-tech-report.txt` in your Factorio user data folder: settings,
+  every category with its turrets, base range and range per level, why each turret is in its
+  category, why ignored turrets are ignored, the research plan (units, time, science packs per
+  level) and warnings.
+- `/range-tech-prep-uninstall`: see above (admins only).
+- `/range-tech-resume`: see above (admins only).
+
+## Turrets placed by scripts
+
+Turrets built normally or by bots are upgraded instantly. A script that creates a turret without
+raising a build event (for example `surface.create_entity` without `raise_built = true`) cannot be
+hooked, so a periodic sweep upgrades the normal turrets of researched categories. The interval is
+the runtime setting "Upgrade sweep interval" (default 10 seconds, 0 = off). Scripts that pass
+`raise_built = true` are upgraded immediately.
 
 ## How it works / limitations
 
@@ -125,6 +145,37 @@ copy when research completes or a turret is built.
   the turrets in it, and other mods that read the blueprint mapping after this mod may find it
   empty.
 - Technology icons are reused from the technologies that unlock the turrets.
+
+## Technology icons
+
+Every range research shows the icon of the technology that unlocks its turrets, with the small
+"range" symbol that vanilla puts on the artillery range research.
+
+**Validation.** Lua cannot open image files during loading, so the real pixel size of a mod's
+PNG cannot be checked, and the game only notices a size mismatch after all mods have loaded.
+What the mod does instead:
+
+- It only reuses another mod's icon when every layer looks sound (a `.png` path, a sensible
+  `icon_size` that is copied onto each layer, a valid scale), and it reuses it exactly as that
+  mod defines it for its own technology. Anything doubtful falls back to a vanilla icon.
+- The startup setting **Technology icons** can be switched from `Auto` to `Built-in`, which only
+  ever uses vanilla icons. Use that if a mod pack reports a sprite or icon error that mentions
+  `rangetech` technologies.
+- Images that belong to this mod are checked at build time (CI runs `scripts/validate_assets.sh`),
+  where the real file can be inspected.
+
+**Range symbol.** The symbol is read from vanilla itself (the technology with the
+`artillery-range` effect), so no path is hardcoded. If it is not found, researches simply have no
+symbol. To use your own image:
+
+1. Draw a PNG named `graphics/range-overlay.png`: 128 x 128 pixels, 32-bit RGBA, transparent
+   background. A simple range glyph (for example a ring or crosshair with arrows pointing outwards)
+   in light colours with a thin dark outline so it stays readable at small size, with a few pixels
+   of margin. No text.
+2. In `lib/icons.lua` set `M.CUSTOM_OVERLAY = "__range-tech__/graphics/range-overlay.png"`.
+3. Position and size are taken from the vanilla symbol layer (bottom-right corner), so the image
+   only needs the right canvas size. CI fails if the file is missing, not 128 x 128 or has no alpha
+   channel.
 
 ## Requirements
 
@@ -149,9 +200,11 @@ install it directly through the in-game mod portal.
    Settings -> Secrets and variables -> Actions (create the key at
    factorio.com/profile).
 3. Add `thumbnail.png` (144x144) to the repo root.
-4. Submit the very first release to the mod portal manually; the Upload API
-   cannot create a new mod listing.
-5. Name PRs `type: description` for players (see "Changelog" below).
+4. The `FACTORIO_API_KEY` needs the "ModPortal: Upload Mods" usage and, so the
+   very first release can create the mod listing, also "ModPortal: Publish
+   Mods" (both are chosen when creating the key on factorio.com/profile).
+5. Every PR needs a `Changelog:` section in its description (see "PR
+   Changelog" below).
 
 ---
 
@@ -165,7 +218,9 @@ release is a tag you create deliberately with the **Release** button.
 
 ### CI (PRs into `master`, pushes to `master`)
 
-Validates `info.json` and does a dry-run package build. Does not publish
+Validates `info.json`, `changelog.txt` (against the
+[official changelog format](https://lua-api.factorio.com/latest/auxiliary/changelog-format.html))
+and the mod's own images, and does a dry-run package build. Does not publish
 anything. The built zip is attached as a workflow artifact for inspection.
 
 ### PR reminders (PRs into `master`) -- non-blocking
@@ -178,8 +233,8 @@ with links to the relevant docs. Currently checked:
 - `locale/en/locale.cfg`
 - leftover template placeholders in `info.json`
 - the template's "Using this template" section still in `README.md`
-- the PR title: a changelog preview, or a warning if it has no `type:` prefix
-  (see "Changelog" below), or confirmation of a manual changelog entry
+- the optional `portal-description.md`
+- the optional `graphics/range-overlay.png` range symbol
 
 It never fails the build. If everything is in place and no comment exists
 yet, it stays quiet. PRs from forks cannot receive comments; the same
@@ -188,54 +243,72 @@ reminder is then shown in the run's summary instead.
 To change what is checked, edit `scripts/check_optional_files.sh` (the
 workflow itself is `.github/workflows/pr-reminders.yml`).
 
-### Changelog (auto-generated, manual override possible)
+### PR Changelog (PRs into `master`) -- required
 
-When you run the Release workflow, `changelog.txt` is generated from the
-commit messages since the last `v*` tag, unless you already wrote an entry
-yourself.
+Every pull request description must contain a line that reads `Changelog:`,
+followed by the changes of that PR. The **PR Changelog** workflow fails when
+the section is missing or invalid, keeps one comment on the PR up to date
+(with a preview of the exact lines that will end up in `changelog.txt`), and
+re-runs when the description is edited. A PR template pre-fills the section.
+To make the check required, add it to the branch protection / ruleset of
+`master`.
 
-**The merge message is what counts.** The pipeline reads the commit subjects
-on `master`. Merging is squash-only (set up by `scripts/configure_repo.sh`),
-and the squash commit subject is the **PR title**, so name PRs
-`type: description`, written for players. The commits inside the PR are not
-used.
+```
+Changelog:
+Features:
+- A single line entry.
+- A multi-line entry continues on the next line
+  without a new dash.
+Bugfixes:
+- Fixed something that was broken.
+```
 
-**Prefixes** (optional scope, e.g. `fix(gui): ...`):
+- Categories are the ones the game recognises: Major Features, Features,
+  Minor Features, Graphics, Sounds, Optimizations, Balancing, Combat
+  Balancing, Circuit Network, Changes, Bugfixes, Modding, Scripting, Gui,
+  Control, Translation, Debug, Ease of use, Info, Locale, Compatibility.
+  Matching ignores case. Use as many as the change needs.
+- Every entry sits under a category. Use a multi-line entry when one line
+  does not explain the change.
+- Write `Changelog: none` for changes players do not care about (CI, docs,
+  refactoring). It is a deliberate choice, so a PR cannot forget it.
+- Markdown decoration (`## Changelog:`, `**Features:**`, `*` bullets) is
+  accepted, and HTML comments are ignored.
 
-| Prefix                                                       | Changelog category        |
-| ------------------------------------------------------------ | ------------------------- |
-| `feat:`                                                      | Features                  |
-| `fix:`                                                       | Bugfixes                  |
-| `perf:`                                                      | Optimizations             |
-| `balance:`                                                   | Balancing                 |
-| `info:`                                                      | Info                      |
-| `chore:` `ci:` `docs:` `test:` `build:` `style:` `refactor:` | kept out of the changelog |
-| no prefix / unknown prefix                                   | kept out of the changelog |
+The parser writes the entries in the exact format of the game: 99 dashes, the
+version, the date, categories with 2 spaces, entries with 4 spaces and `- `,
+continuation lines with 6 spaces, no duplicates, no tabs or trailing
+whitespace. You never format that yourself.
 
-Also skipped: merge commits, the pipeline's own version-bump commits, and
-any commit with `[skip changelog]` in the subject. A trailing `(#123)` PR
-reference is stripped from the text.
+### Changelog (built from the pull requests)
 
-**Manual override:** add an entry at the top of `changelog.txt` for the
+When you run the Release workflow, `scripts/changelog.py` collects the
+`Changelog:` sections of all PRs merged since the last `v*` tag (read through
+the GitHub API, falling back to the commit message, which holds the PR
+description for squash merges) and writes the new version section at the top
+of `changelog.txt`. Identical entries from different PRs are merged. The
+**date is filled in automatically**, in the style of the official example
+(`DD. MM. YYYY`). The same entries become the notes of the GitHub release.
+
+The release **fails before anything is committed or tagged** if no entries
+were found or the result would not follow the format. PRs that were merged
+without a `Changelog:` section are listed as warnings.
+
+**Manual override:** add a section at the top of `changelog.txt` for the
 version the release will become (you choose the bump when you click Release,
 so it is only known then). If the top entry already has that version, the
 generator leaves it untouched. If your top entry is a *different, newer*
 version than the release (e.g. you wrote `0.1.0` but the bump produced
-`0.0.5`), generation is refused with a warning so the file stays in order.
+`0.0.5`), generation is refused so the file stays in order. Every version
+needs a `Date:` line and at least one entry.
 
 **Internal versions:** every version gets its own changelog entry, whether or
 not it ever reaches the mod portal. Entries and published versions don't
 have to line up 1:1. When you publish a later version, the portal simply
 shows the entries of the internal versions in between as well.
 
-**Feedback:** the PR reminder comment checks the PR title (it re-runs when
-you rename the PR). It shows a collapsed preview of the changelog line the
-title will generate, or a non-blocking warning when the title has no
-prefix, so a player-relevant change doesn't silently miss the changelog.
-Internal prefixes (`chore:` etc.) only get a neutral note. On release, a
-warning annotation appears if there is still no entry with changes for the
-new version, e.g. when every commit was internal. Nothing here blocks a
-merge or a release.
+`python3 scripts/changelog.py` has four commands: `check-pr`, `validate`,
+`release` and `notes` (see `--help`); it needs nothing but Python 3.
 
 The template starts at `0.0.0` in `info.json` with a manual `0.0.1` entry, so
 the first release (bump `release`) lands on `0.0.1` and keeps that entry.
@@ -256,12 +329,14 @@ The workflow then:
 1. Stops if there are no commits since the last tag (guards against a double
    click).
 2. Bumps the version in `info.json`.
-3. Generates the changelog entry from commit messages (unless a manual
-   entry exists), commits `info.json` and `changelog.txt` back to `master`
-   and tags it `vX.Y.Z`.
+3. Generates the changelog entry from the PR changelog sections (unless a
+   manual entry exists), commits `info.json` and `changelog.txt` back to
+   `master` and tags it `vX.Y.Z`. It stops before this step if the changelog
+   cannot be generated.
 4. Packages the mod into `<mod-name>_X.Y.Z.zip` with the correct
    mod-portal folder structure.
-5. Creates a GitHub Release with that zip attached.
+5. Creates a GitHub Release with that zip attached and the changelog entry
+   as the release notes.
 
 The workflow pushes the version-bump commit directly to `master`. If you add
 branch protection that requires pull requests on `master`, that push will be
@@ -280,6 +355,25 @@ the latest GitHub Release that is not marked as a pre-release (so internal
 versions are skipped).
 
 That workflow downloads the chosen release's zip and publishes it to the
-Factorio Mod Portal via the official
-[Mod Upload API](https://wiki.factorio.com/Mod_upload_API). Nothing ever
-reaches the live mod portal without this manual step.
+Factorio Mod Portal. Nothing ever reaches the live mod portal without this
+manual step.
+
+It works in two steps:
+
+1. **The easy way:** add a release to the existing mod through the
+   [Mod upload API](https://wiki.factorio.com/Mod_upload_API).
+2. **If the mod does not exist on the portal yet** (the portal answers
+   `UnknownMod`), publish it as a **new mod** through the
+   [Mod publish API](https://wiki.factorio.com/Mod_publish_API). Only that
+   one specific answer triggers this, so a bad key or a version that already
+   exists never creates a listing by accident. The checkbox
+   `new_mod_fallback` in the Run workflow form (on by default) turns this step
+   off. A workflow cannot ask a question halfway through, so that form is the
+   prompt: the click on **Run workflow** is the confirmation.
+
+For a new mod the form also takes an optional `category`, `license` and
+`source_url` (default: this repository). The portal description is the
+contents of `portal-description.md` in the repo root if that file exists (it
+is not packaged into the mod), otherwise the `description` from `info.json`.
+Title, tags, FAQ and images can be finished on the mod's portal page
+afterwards.

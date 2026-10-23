@@ -24,6 +24,17 @@ extend[#extend + 1] = {
   order = "b-overrides",
 }
 
+-- Where technology icons come from. A wrong icon can only be detected by the engine after all
+-- mods have loaded, so if a mod pack reports a sprite/icon error, switch this to "builtin".
+extend[#extend + 1] = {
+  type = "string-setting",
+  name = "rangetech-icon-source",
+  setting_type = "startup",
+  default_value = "auto",
+  allowed_values = { "auto", "builtin" },
+  order = "b-icons",
+}
+
 -- Research cost (only used with the "custom" preset).
 extend[#extend + 1] = {
   type = "int-setting",
@@ -83,5 +94,17 @@ for index, id in ipairs(categories.IDS) do
     order = "d-" .. index .. "-3",
   }
 end
+
+-- Runtime setting: how often (seconds) turrets that a script placed without raising a build
+-- event are found and upgraded. 0 turns the sweep off.
+extend[#extend + 1] = {
+  type = "int-setting",
+  name = "rangetech-sweep-interval",
+  setting_type = "runtime-global",
+  default_value = 10,
+  minimum_value = 0,
+  maximum_value = 600,
+  order = "e-sweep",
+}
 
 data:extend(extend)

@@ -4,9 +4,9 @@
   "title": "Range Tech",
   "author": "TDSrock",
   "description": "Range research for every turret, grouped into categories by ammo or damage type. Works with quality turrets and modded turrets, with configurable levels, costs and presets.",
-  "factorio_version": "2.0",
+  "factorio_version": "2.1",
   "dependencies": [
-    "base >= 2.0.0",
+    "base >= 2.1.0",
     "? space-age"
   ]
 }

@@ -10,6 +10,7 @@ local function get_config()
     config.variants = config.variants or {}
     config.categories = config.categories or {}
     config.techs = config.techs or {}
+    config.plans = config.plans or {}
     config.classification = config.classification or {}
     config.reasons = config.reasons or {}
     config.warnings = config.warnings or {}
@@ -21,10 +22,16 @@ local cfg = get_config()
 
 -- category -> list of every entity name (base + variants) that belongs to it
 local category_entities = {}
+-- category -> list of base entity names only
+local category_bases = {}
 for base, info in pairs(cfg.turrets) do
   local list = category_entities[info.category] or {}
   list[#list + 1] = base
   category_entities[info.category] = list
+
+  local bases = category_bases[info.category] or {}
+  bases[#bases + 1] = base
+  category_bases[info.category] = bases
 end
 for variant_name, info in pairs(cfg.variants) do
   local category = cfg.turrets[info.base] and cfg.turrets[info.base].category
@@ -68,6 +75,38 @@ end
 
 local MAX_PRIORITY_SLOTS = 10
 
+-- Fluids of a fluid turret. Factorio 2.0 exposes them as entity.fluidbox[i]; 2.1 removed LuaFluidBox
+-- and uses entity.get_fluid(i) / entity.set_fluid(i, fluid). Whichever the running game has is used.
+local function read_fluids(entity)
+  local fluids = {}
+  local has_fluidbox, fluidbox = pcall(function() return entity.fluidbox end)
+  if has_fluidbox and fluidbox then
+    for i = 1, #fluidbox do
+      local fluid = fluidbox[i]
+      if fluid then fluids[i] = { name = fluid.name, amount = fluid.amount, temperature = fluid.temperature } end
+    end
+  else
+    pcall(function()
+      for i = 1, #entity.prototype.fluidbox_prototypes do
+        local fluid = entity.get_fluid(i)
+        if fluid then fluids[i] = { name = fluid.name, amount = fluid.amount, temperature = fluid.temperature } end
+      end
+    end)
+  end
+  return fluids
+end
+
+local function write_fluids(entity, fluids)
+  local has_fluidbox, fluidbox = pcall(function() return entity.fluidbox end)
+  for i, fluid in pairs(fluids) do
+    if has_fluidbox and fluidbox then
+      pcall(function() fluidbox[i] = fluid end)
+    else
+      pcall(function() entity.set_fluid(i, fluid) end)
+    end
+  end
+end
+
 local function save_state(entity)
   local state = {}
 
@@ -92,11 +131,7 @@ local function save_state(entity)
   end
 
   if entity.type == "fluid-turret" then
-    state.fluids = {}
-    for i = 1, #entity.fluidbox do
-      local fluid = entity.fluidbox[i]
-      if fluid then state.fluids[i] = { name = fluid.name, amount = fluid.amount, temperature = fluid.temperature } end
-    end
+    state.fluids = read_fluids(entity)
   end
 
   if entity.type == "electric-turret" then
@@ -126,11 +161,7 @@ local function restore_state(new_entity, state)
   pcall(function()
     if state.energy then new_entity.energy = state.energy end
   end)
-  pcall(function()
-    for i, fluid in pairs(state.fluids or {}) do
-      new_entity.fluidbox[i] = fluid
-    end
-  end)
+  if state.fluids then write_fluids(new_entity, state.fluids) end
 
   if state.ammo then
     local inventory = new_entity.get_inventory(defines.inventory.turret_ammo)
@@ -249,6 +280,52 @@ script.on_event(defines.events.on_forces_merged, function(event)
 end)
 
 ---------------------------------------------------------------------------
+-- Sweep: a script can create a turret without raising a build event (for example
+-- surface.create_entity without raise_built). Nothing can hook that, so every few seconds the
+-- normal (not upgraded) turrets of researched categories are looked up and upgraded.
+-- Interval: runtime setting "rangetech-sweep-interval" (seconds, 0 = off).
+---------------------------------------------------------------------------
+
+local function sweep()
+  if storage.paused then return end
+  for _, force in pairs(game.forces) do
+    local names = {}
+    for category, bases in pairs(category_bases) do
+      if get_level(force, category) > 0 then
+        for _, name in ipairs(bases) do names[#names + 1] = name end
+      end
+    end
+    if #names > 0 then
+      for _, surface in pairs(game.surfaces) do
+        for _, entity in pairs(surface.find_entities_filtered({ name = names, force = force })) do
+          normalize(entity)
+        end
+      end
+    end
+  end
+end
+
+local registered_interval
+
+local function register_sweep()
+  if registered_interval then
+    script.on_nth_tick(registered_interval, nil)
+    registered_interval = nil
+  end
+  local seconds = settings.global["rangetech-sweep-interval"].value
+  if seconds > 0 and next(cfg.turrets) then
+    registered_interval = math.floor(seconds * 60)
+    script.on_nth_tick(registered_interval, sweep)
+  end
+end
+
+register_sweep()
+
+script.on_event(defines.events.on_runtime_mod_setting_changed, function(event)
+  if event.setting == "rangetech-sweep-interval" then register_sweep() end
+end)
+
+---------------------------------------------------------------------------
 -- Blueprints: variants never leave the mod. Every blueprint (copy, cut, new blueprint,
 -- re-selecting contents, library records) is rewritten to the normal turret names, so it
 -- works with and without this mod, and ghosts built from it are always the normal turret.
@@ -282,8 +359,16 @@ end
 script.on_init(refresh_all)
 script.on_configuration_changed(refresh_all)
 
+-- Remind players when upgrades are paused (see /range-tech-prep-uninstall).
+script.on_event(defines.events.on_player_joined_game, function(event)
+  if storage.paused then
+    local player = game.get_player(event.player_index)
+    if player then player.print({ "rangetech.cmd-paused-notice" }) end
+  end
+end)
+
 ---------------------------------------------------------------------------
--- /rangetech: shows the category of every turret and the current research level
+-- Commands
 ---------------------------------------------------------------------------
 
 local CATEGORY_ORDER = {
@@ -292,70 +377,7 @@ local CATEGORY_ORDER = {
   "support", "other", "ignored",
 }
 
-local function turret_name(name)
-  local proto = prototypes.entity[name]
-  return proto and proto.localised_name or name
-end
-
-commands.add_command("rangetech", { "rangetech.command-help" }, function(command)
-  local player = command.player_index and game.get_player(command.player_index)
-  local function say(message)
-    if player then player.print(message) else game.print(message) end
-  end
-
-  local by_category = {}
-  for name, category in pairs(cfg.classification) do
-    by_category[category] = by_category[category] or {}
-    table.insert(by_category[category], name)
-  end
-
-  local force = player and player.force or game.forces["player"]
-
-  for _, category in ipairs(CATEGORY_ORDER) do
-    local names = by_category[category]
-    if names then
-      table.sort(names)
-      local line = { "", { "rangetech.cmd-category", { "rangetech.category-" .. category } } }
-      local info = cfg.categories[category]
-      if category == "ignored" then
-        line[#line + 1] = { "rangetech.cmd-ignored" }
-      elseif info and force then
-        line[#line + 1] = { "rangetech.cmd-level", get_level(force, category), info.levels }
-      else
-        line[#line + 1] = { "rangetech.cmd-no-research" }
-      end
-      say(line)
-
-      if category == "ignored" then
-        -- One line per ignored turret, with the reason it is ignored.
-        for _, name in ipairs(names) do
-          say({ "", "  ", turret_name(name), " (" .. name .. "): ", cfg.reasons[name] or "" })
-        end
-      else
-        local list = { "" }
-        for i, name in ipairs(names) do
-          if i > 1 then list[#list + 1] = ", " end
-          list[#list + 1] = turret_name(name)
-          list[#list + 1] = " (" .. name .. ")"
-          if #list >= 18 then
-            say(list)
-            list = { "" }
-          end
-        end
-        if #list > 1 then say(list) end
-      end
-    end
-  end
-
-  for _, warning in ipairs(cfg.warnings) do
-    say("[range-tech] " .. warning)
-  end
-end)
-
----------------------------------------------------------------------------
--- Removing the mod: variants disappear from a save when the mod is removed, so turn them
--- back into normal turrets first with /rangetech-revert (admins only).
----------------------------------------------------------------------------
+local REPORT_FILE = "range-tech-report.txt"
 
 local function reply(command, message)
   local player = command.player_index and game.get_player(command.player_index)
@@ -367,7 +389,137 @@ local function is_allowed(command)
   return (not player) or player.admin
 end
 
-commands.add_command("rangetech-revert", { "rangetech.revert-help" }, function(command)
+local function format_range(range)
+  return string.format("%g", range)
+end
+
+local function bonus_text(info)
+  if info.mode == "flat" then
+    return string.format("+%g tiles of range per level", info.amount)
+  end
+  return string.format("+%g%% of base range per level", info.amount)
+end
+
+-- Plain-text report for the player to review: settings, every category with its turrets, the
+-- range per level of each turret, the research plan and why ignored turrets are ignored.
+local function build_report(force)
+  local lines = {}
+  local function add(text) lines[#lines + 1] = text end
+
+  add("Range Tech report")
+  add("Mod version: " .. tostring(script.active_mods["range-tech"]))
+  add("Game time: " .. math.floor(game.tick / 60) .. " s")
+  add("Preset: " .. tostring(settings.startup["rangetech-preset"].value))
+  local overrides = settings.startup["rangetech-overrides"].value
+  add("Category overrides: " .. ((overrides and overrides ~= "") and overrides or "(none)"))
+  add("Range upgrades paused: " .. tostring(storage.paused and true or false))
+  add("Research progress shown for force: " .. (force and force.name or "?"))
+  add("")
+
+  local by_category = {}
+  for name, category in pairs(cfg.classification) do
+    by_category[category] = by_category[category] or {}
+    table.insert(by_category[category], name)
+  end
+
+  for _, category in ipairs(CATEGORY_ORDER) do
+    local names = by_category[category]
+    if names then
+      table.sort(names)
+      add("== " .. category .. " (" .. #names .. " turret" .. (#names == 1 and "" or "s") .. ") ==")
+
+      if category == "ignored" then
+        add("This mod does nothing with these turrets.")
+        for _, name in ipairs(names) do
+          add("  " .. name .. ": " .. tostring(cfg.reasons[name] or "?"))
+        end
+      else
+        local info = cfg.categories[category]
+        if info then
+          local level = force and get_level(force, category) or 0
+          add("Range research: level " .. level .. " of " .. info.levels .. " researched")
+          add("Bonus: " .. bonus_text(info))
+          local plan = cfg.plans[category]
+          if plan then
+            add("Research levels:")
+            for _, step in ipairs(plan) do
+              add(string.format("  level %d: %d units x %d s, science: %s",
+                step.level, step.count, step.time, table.concat(step.packs, ", ")))
+            end
+          end
+        else
+          add("No range research for this category (0 levels in the settings, or no icon found).")
+        end
+
+        add("Turrets:")
+        for _, name in ipairs(names) do
+          local turret = cfg.turrets[name]
+          local text = "  " .. name
+          if turret and turret.base_range then
+            local ranges = {}
+            for level, range in ipairs(turret.ranges or {}) do ranges[level] = format_range(range) end
+            text = text .. ": base range " .. format_range(turret.base_range)
+            if #ranges > 0 then text = text .. ", per level: " .. table.concat(ranges, " / ") end
+          end
+          text = text .. " [" .. tostring(cfg.reasons[name] or "?") .. "]"
+          add(text)
+        end
+      end
+      add("")
+    end
+  end
+
+  if #cfg.warnings > 0 then
+    add("== warnings ==")
+    for _, warning in ipairs(cfg.warnings) do add("  " .. warning) end
+    add("")
+  end
+
+  return table.concat(lines, "\n") .. "\n"
+end
+
+local function report_command(command)
+  local player = command.player_index and game.get_player(command.player_index)
+  local force = player and player.force or game.forces["player"]
+
+  -- Short summary in chat.
+  for _, category in ipairs(CATEGORY_ORDER) do
+    local has_turrets = false
+    for _, turret_category in pairs(cfg.classification) do
+      if turret_category == category then has_turrets = true break end
+    end
+    if has_turrets then
+      local line = { "", { "rangetech.cmd-category", { "rangetech.category-" .. category } } }
+      local info = cfg.categories[category]
+      if category == "ignored" then
+        line[#line + 1] = { "rangetech.cmd-ignored" }
+      elseif info and force then
+        line[#line + 1] = { "rangetech.cmd-level", get_level(force, category), info.levels }
+      else
+        line[#line + 1] = { "rangetech.cmd-no-research" }
+      end
+      reply(command, line)
+    end
+  end
+
+  -- Full data in script-output/.
+  local ok, err = pcall(function()
+    helpers.write_file(REPORT_FILE, build_report(force), false)
+  end)
+  if ok then
+    reply(command, { "rangetech.cmd-report-written", REPORT_FILE })
+  else
+    reply(command, { "rangetech.cmd-report-failed" })
+    log("[range-tech] could not write report: " .. tostring(err))
+  end
+end
+
+commands.add_command("range-tech", { "rangetech.command-help" }, report_command)
+commands.add_command("rangetech", { "rangetech.command-help" }, report_command)
+
+-- Removing the mod: variants disappear from a save when the mod is removed, so turn them
+-- back into normal turrets first (admins only).
+commands.add_command("range-tech-prep-uninstall", { "rangetech.uninstall-help" }, function(command)
   if not is_allowed(command) then
     reply(command, { "rangetech.cmd-admin-only" })
     return
@@ -395,7 +547,8 @@ commands.add_command("rangetech-revert", { "rangetech.revert-help" }, function(c
   reply(command, { "rangetech.cmd-reverted", count })
 end)
 
-commands.add_command("rangetech-resume", { "rangetech.resume-help" }, function(command)
+-- Turns range upgrades back on and upgrades every turret that is not at its research level yet.
+commands.add_command("range-tech-resume", { "rangetech.resume-help" }, function(command)
   if not is_allowed(command) then
     reply(command, { "rangetech.cmd-admin-only" })
     return
