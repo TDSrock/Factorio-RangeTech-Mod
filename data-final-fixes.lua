@@ -100,7 +100,9 @@ for _, category in ipairs(categories.IDS) do
           variant.localised_name = base.localised_name or { "entity-name." .. base.name }
           variant.hidden = true
           variant.hidden_in_factoriopedia = true
-          variant.factoriopedia_alternative = base.name
+          local base_prototypes = data.raw[base.type]
+          variant.factoriopedia_alternative =
+            base_prototypes and base_prototypes[base.name] and base.name or nil
           variant.placeable_by = { item = entry.item, count = 1 }
           variant.fast_replaceable_group = group
 
