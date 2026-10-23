@@ -64,6 +64,20 @@ for _, category in ipairs(categories.IDS) do
   if list and #list > 0 and cfg.levels and cfg.levels > 0 then
     local plan = science.plan(list, cfg.levels, config.cost, config.icon_official_only)
 
+    if plan.icons then
+    for i, layer in ipairs(plan.icons) do
+      log(string.format(
+        "[range-tech][icon-debug] category=%s layer=%d path=%s size=%s",
+        category,
+        i,
+        tostring(layer.icon),
+        tostring(layer.icon_size)
+      ))
+    end
+  else
+    log("[range-tech][icon-debug] category=" .. category .. " has no selected icon")
+  end
+
     if not plan.icons then
       warnings[#warnings + 1] = "No technology icon found for category '" .. category .. "', no research created."
     else
