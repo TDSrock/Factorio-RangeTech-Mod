@@ -1,4 +1,3 @@
-```lua
 -- Works out which science packs each range research needs. Data stage only.
 --
 -- For a category:
