@@ -212,9 +212,12 @@ function M.plan(entries, level_count, cost, official_only)
   local plan = { levels = {} }
   plan.unlock_prerequisite = easiest.tech and easiest.tech.name or nil
 
-  -- Icon: unlock tech of the easiest turret, else of any turret in the category. The layers are
-  -- validated (lib/icons.lua); anything doubtful falls through to a vanilla icon.
-  if easiest.tech then plan.icons = icons.from_tech(easiest.tech, official_only) end
+  -- Icon: try the easiest turret's unlock technology first, then the others.
+  -- Respect the official-only setting, but allow modded icons when it is disabled.
+  if easiest.tech then
+    plan.icons = icons.from_tech(easiest.tech, official_only)
+  end
+
   if not plan.icons then
     for _, info in ipairs(infos) do
       if info.tech then
@@ -223,15 +226,31 @@ function M.plan(entries, level_count, cost, official_only)
       end
     end
   end
-  -- Fallback: a vanilla technology that fits the category.
+
+  -- Fallback: prefer category-specific technologies, then generic ones.
+  -- When modded icons are allowed, don't unnecessarily restrict this to vanilla.
   if not plan.icons then
     local candidates = {}
-    for _, name in ipairs(FALLBACK_TECHS[entries[1].category] or {}) do candidates[#candidates + 1] = name end
-    for _, name in ipairs(GENERIC_FALLBACKS) do candidates[#candidates + 1] = name end
+    local seen = {}
+
+    for _, name in ipairs(FALLBACK_TECHS[entries[1].category] or {}) do
+      if not seen[name] then
+        candidates[#candidates + 1] = name
+        seen[name] = true
+      end
+    end
+
+    for _, name in ipairs(GENERIC_FALLBACKS) do
+      if not seen[name] then
+        candidates[#candidates + 1] = name
+        seen[name] = true
+      end
+    end
+
     for _, name in ipairs(candidates) do
       local tech = data.raw.technology[name]
       if tech then
-        plan.icons = icons.from_tech(tech, true)
+        plan.icons = icons.from_tech(tech, official_only)
         if plan.icons then break end
       end
     end
