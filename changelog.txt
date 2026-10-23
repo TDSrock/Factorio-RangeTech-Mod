@@ -8,6 +8,7 @@ Date: 22. 10. 2026
     - Turrets that a script places without raising a build event are now upgraded by a periodic sweep. New runtime setting "Upgrade sweep interval" (default 10 seconds, 0 = off).
     - /range-tech-prep-uninstall turns every turret back into its normal version and pauses upgrades, also after saving and loading. Run it before removing the mod. /range-tech-resume turns upgrades back on and upgrades every turret that is not at its research level yet. These replace /rangetech-revert and /rangetech-resume.
     - Enhanced the turret type inference system to also check odd ammo types (looking at you Laser Mk2 with your lenses)
+    - Range research icons now prioritize matching vanilla damage-upgrade technologies where available, then scan for technologies with relevant damage bonuses (including modded technologies), before falling back to turret unlock or category icons. The range overlay remains unchanged.
   Bugfixes:
     - Changed the logic for using fallback icons so it should happen less often.
   Compatibility:
