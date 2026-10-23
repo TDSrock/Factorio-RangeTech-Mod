@@ -1,6 +1,6 @@
 {
   "name": "range-tech",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "title": "Range Tech",
   "author": "TDSrock",
   "description": "Range research for every turret, grouped into categories by ammo or damage type. Works with quality turrets and modded turrets, with configurable levels, costs and presets.",

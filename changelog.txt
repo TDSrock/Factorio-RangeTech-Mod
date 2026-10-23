@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.2
+Date: 23. 10. 2026
+  Bugfixes:
+    - Fixed a mod compatibility issue where generated turret variants could reference a turret removed by another mod, preventing the game from loading.
+    - Added hidden optional dependencies for K2 arsenal to improve load order consistency.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.1
 Date: 22. 10. 2026
   Features:
