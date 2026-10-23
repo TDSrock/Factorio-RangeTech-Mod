@@ -1,3 +1,4 @@
+
 -- Works out which science packs each range research needs. Data stage only.
 --
 -- For a category:
@@ -14,8 +15,8 @@ local FALLBACK_PACK = "automation-science-pack"
 -- Indexes
 ---------------------------------------------------------------------------
 
-local unlock_index -- recipe name -> list of technologies unlocking it
-local result_index -- item name -> list of recipe names producing it
+local unlock_index
+local result_index
 
 local function ensure_indexes()
   if unlock_index then return end
@@ -53,8 +54,6 @@ local function ingredient_name(ingredient)
   return ingredient.name or ingredient[1]
 end
 
--- Set of science pack names a technology needs. Technologies without a unit
--- (research triggers) inherit from their prerequisites.
 local function tech_packs(tech, depth)
   local packs = {}
   if tech.unit and tech.unit.ingredients then
@@ -65,7 +64,9 @@ local function tech_packs(tech, depth)
     for _, prerequisite in pairs(tech.prerequisites or {}) do
       local pre = data.raw.technology[prerequisite]
       if pre then
-        for pack in pairs(tech_packs(pre, (depth or 0) + 1)) do packs[pack] = true end
+        for pack in pairs(tech_packs(pre, (depth or 0) + 1)) do
+          packs[pack] = true
+        end
       end
     end
   end
@@ -78,7 +79,6 @@ local function count_keys(set)
   return n
 end
 
--- Rough "how hard is it to unlock this" measure: fewer packs, then lower unit count.
 local function tech_cost(tech)
   local count = tech.unit and tech.unit.count or 0
   return count_keys(tech_packs(tech)) * 1e9 + count
@@ -89,7 +89,9 @@ local function cheapest(techs)
   for _, tech in ipairs(techs) do
     if tech.enabled ~= false then
       local cost = tech_cost(tech)
-      if not best_cost or cost < best_cost or (cost == best_cost and tech.name < best.name) then
+      if not best_cost
+        or cost < best_cost
+        or (cost == best_cost and tech.name < best.name) then
         best, best_cost = tech, cost
       end
     end
@@ -97,7 +99,6 @@ local function cheapest(techs)
   return best
 end
 
--- The technology that unlocks an item (via a recipe), or nil if it is available from the start.
 local function unlock_tech_for_item(item_name)
   ensure_indexes()
   local candidates = {}
@@ -118,13 +119,12 @@ end
 -- Pack ordering
 ---------------------------------------------------------------------------
 
--- Science packs are plain items from Factorio 2.1 on (before that they were "tool" prototypes), so
--- a pack is looked up in every item type instead of only in data.raw.tool.
 local pack_order_cache = {}
 
 local function pack_order(name)
   local cached = pack_order_cache[name]
   if cached ~= nil then return cached end
+
   local order = "zzz"
   for type_name in pairs(defines.prototypes["item"]) do
     local proto = data.raw[type_name] and data.raw[type_name][name]
@@ -133,22 +133,30 @@ local function pack_order(name)
       break
     end
   end
+
   pack_order_cache[name] = order
   return order
 end
 
 local function sorted_packs(set)
   local list = {}
-  for pack in pairs(set) do list[#list + 1] = pack end
+  for pack in pairs(set) do
+    list[#list + 1] = pack
+  end
+
   table.sort(list, function(a, b)
     local oa, ob = pack_order(a), pack_order(b)
     if oa ~= ob then return oa < ob end
     return a < b
   end)
+
   return list
 end
 
--- Vanilla technologies whose icon suits a category, tried in order.
+---------------------------------------------------------------------------
+-- Icon selection
+---------------------------------------------------------------------------
+
 local FALLBACK_TECHS = {
   bullet = { "gun-turret" },
   shotgun = { "military" },
@@ -164,122 +172,175 @@ local FALLBACK_TECHS = {
   support = { "military" },
   other = { "military" },
 }
-local GENERIC_FALLBACKS = { "military", "military-2", "gun-turret" }
+
+local GENERIC_FALLBACKS = {
+  "military",
+  "military-2",
+  "gun-turret",
+}
+
+-- These technologies have a recycler as their main icon, which is not
+-- appropriate for Range Tech research. Reject them and try the next option.
+local REJECTED_ICON_PATHS = {
+  ["__base__/graphics/technology/recycling.png"] = true,
+  ["__quality__/graphics/technology/recycling.png"] = true,
+}
+
+local function is_recycler_icon(path)
+  if type(path) ~= "string" then return false end
+
+  if REJECTED_ICON_PATHS[path] then
+    return true
+  end
+
+  -- Handle equivalent paths used by mods or alternate Factorio assets.
+  local lower = string.lower(path)
+  return string.find(lower, "recycl", 1, true) ~= nil
+end
+
+local function acceptable_tech_icon(tech, official_only)
+  if not tech then return nil end
+
+  local layers = icons.from_tech(tech, official_only)
+  if not layers then return nil end
+
+  for _, layer in ipairs(layers) do
+    if is_recycler_icon(layer.icon) then
+      return nil
+    end
+  end
+
+  return layers
+end
+
+local function choose_icons(entries, infos, easiest, official_only)
+  -- Prefer the easiest turret's unlock technology.
+  if easiest.tech then
+    local layers = acceptable_tech_icon(easiest.tech, official_only)
+    if layers then return layers end
+  end
+
+  -- Try every other turret's unlock technology in cost/name order.
+  for _, info in ipairs(infos) do
+    if info.tech then
+      local layers = acceptable_tech_icon(info.tech, official_only)
+      if layers then return layers end
+    end
+  end
+
+  -- Try category-specific vanilla technologies, then generic military icons.
+  local candidates, seen = {}, {}
+  for _, name in ipairs(FALLBACK_TECHS[entries[1].category] or {}) do
+    if not seen[name] then
+      candidates[#candidates + 1] = name
+      seen[name] = true
+    end
+  end
+
+  for _, name in ipairs(GENERIC_FALLBACKS) do
+    if not seen[name] then
+      candidates[#candidates + 1] = name
+      seen[name] = true
+    end
+  end
+
+  for _, name in ipairs(candidates) do
+    local tech = data.raw.technology and data.raw.technology[name]
+    if tech then
+      local layers = acceptable_tech_icon(tech, official_only)
+      if layers then return layers end
+    end
+  end
+
+  return nil
+end
 
 ---------------------------------------------------------------------------
 -- Public
 ---------------------------------------------------------------------------
 
--- entries: list of { proto, item, category } of ONE category.
--- official_only: only copy icons from official (vanilla / DLC) art, never from other mods.
--- Returns { icons = ..., unlock_prerequisite = tech name or nil, levels = { [n] = { packs, prerequisites, count, time } } }
 function M.plan(entries, level_count, cost, official_only)
-  -- Per turret: unlock tech and pack set.
   local infos = {}
+
   for _, entry in ipairs(entries) do
     local tech = unlock_tech_for_item(entry.item)
     local packs = tech and tech_packs(tech) or {}
+
     if count_keys(packs) == 0 then
       packs = { [FALLBACK_PACK] = true }
     end
+
     infos[#infos + 1] = {
       name = entry.proto.name,
       tech = tech,
       packs = packs,
-      cost = (tech and tech_cost(tech) or 0),
+      cost = tech and tech_cost(tech) or 0,
     }
   end
 
-  -- Easiest turret = fewest packs / cheapest unlock.
   table.sort(infos, function(a, b)
     if a.cost ~= b.cost then return a.cost < b.cost end
     return a.name < b.name
   end)
-  local easiest = infos[1]
 
+  local easiest = infos[1]
   local union = {}
+
   for _, info in ipairs(infos) do
-    for pack in pairs(info.packs) do union[pack] = true end
+    for pack in pairs(info.packs) do
+      union[pack] = true
+    end
   end
 
-  -- Packs that are in the union but not needed for the easiest turret.
   local extra_set = {}
   for pack in pairs(union) do
-    if not easiest.packs[pack] then extra_set[pack] = true end
+    if not easiest.packs[pack] then
+      extra_set[pack] = true
+    end
   end
   local extra = sorted_packs(extra_set)
 
   local plan = { levels = {} }
   plan.unlock_prerequisite = easiest.tech and easiest.tech.name or nil
-
-  -- Icon: try the easiest turret's unlock technology first, then the others.
-  -- Respect the official-only setting, but allow modded icons when it is disabled.
-  if easiest.tech then
-    plan.icons = icons.from_tech(easiest.tech, official_only)
-  end
-
-  if not plan.icons then
-    for _, info in ipairs(infos) do
-      if info.tech then
-        plan.icons = icons.from_tech(info.tech, official_only)
-        if plan.icons then break end
-      end
-    end
-  end
-
-  -- Fallback: prefer category-specific technologies, then generic ones.
-  -- When modded icons are allowed, don't unnecessarily restrict this to vanilla.
-  if not plan.icons then
-    local candidates = {}
-    local seen = {}
-
-    for _, name in ipairs(FALLBACK_TECHS[entries[1].category] or {}) do
-      if not seen[name] then
-        candidates[#candidates + 1] = name
-        seen[name] = true
-      end
-    end
-
-    for _, name in ipairs(GENERIC_FALLBACKS) do
-      if not seen[name] then
-        candidates[#candidates + 1] = name
-        seen[name] = true
-      end
-    end
-
-    for _, name in ipairs(candidates) do
-      local tech = data.raw.technology[name]
-      if tech then
-        plan.icons = icons.from_tech(tech, official_only)
-        if plan.icons then break end
-      end
-    end
-  end
+  plan.icons = choose_icons(entries, infos, easiest, official_only)
 
   for level = 1, level_count do
     local added
     if level_count == 1 then
       added = #extra
     else
-      added = math.floor((level - 1) * #extra / (level_count - 1) + 0.5)
+      added = math.floor(
+        (level - 1) * #extra / (level_count - 1) + 0.5
+      )
     end
 
     local set = {}
-    for pack in pairs(easiest.packs) do set[pack] = true end
-    for i = 1, added do set[extra[i]] = true end
-    local packs = sorted_packs(set)
+    for pack in pairs(easiest.packs) do
+      set[pack] = true
+    end
+    for i = 1, added do
+      set[extra[i]] = true
+    end
 
+    local packs = sorted_packs(set)
     local prerequisites, seen = {}, {}
+
     local function add_prerequisite(name)
       if name and not seen[name] then
         seen[name] = true
         prerequisites[#prerequisites + 1] = name
       end
     end
-    if level == 1 then add_prerequisite(plan.unlock_prerequisite) end
+
+    if level == 1 then
+      add_prerequisite(plan.unlock_prerequisite)
+    end
+
     for _, pack in ipairs(packs) do
       local pack_tech = unlock_tech_for_pack(pack)
-      if pack_tech then add_prerequisite(pack_tech.name) end
+      if pack_tech then
+        add_prerequisite(pack_tech.name)
+      end
     end
 
     local ingredients = {}
@@ -289,8 +350,11 @@ function M.plan(entries, level_count, cost, official_only)
 
     plan.levels[level] = {
       ingredients = ingredients,
-      prerequisites = prerequisites, -- previous level is added by the caller
-      count = math.max(1, math.floor(cost.base_count * (cost.growth ^ (level - 1)) + 0.5)),
+      prerequisites = prerequisites,
+      count = math.max(
+        1,
+        math.floor(cost.base_count * (cost.growth ^ (level - 1)) + 0.5)
+      ),
       time = cost.time,
     }
   end
