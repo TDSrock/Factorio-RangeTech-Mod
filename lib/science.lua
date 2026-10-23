@@ -416,4 +416,106 @@ function M.plan(entries, level_count, cost, official_only)
   local infos = {}
 
   for _, entry in ipairs(entries) do
-   
+    local tech = unlock_tech_for_item(entry.item)
+    local packs = tech and tech_packs(tech) or {}
+
+    if count_keys(packs) == 0 then
+      packs = { [FALLBACK_PACK] = true }
+    end
+
+    infos[#infos + 1] = {
+      name = entry.proto.name,
+      tech = tech,
+      packs = packs,
+      cost = tech and tech_cost(tech) or 0,
+    }
+  end
+
+  table.sort(infos, function(a, b)
+    if a.cost ~= b.cost then return a.cost < b.cost end
+    return a.name < b.name
+  end)
+
+  local easiest = infos[1]
+  local union = {}
+
+  for _, info in ipairs(infos) do
+    for pack in pairs(info.packs) do
+      union[pack] = true
+    end
+  end
+
+  local extra_set = {}
+  for pack in pairs(union) do
+    if not easiest.packs[pack] then
+      extra_set[pack] = true
+    end
+  end
+
+  local extra = sorted_packs(extra_set)
+  local plan = { levels = {} }
+
+  plan.unlock_prerequisite = easiest.tech and easiest.tech.name or nil
+  plan.icons = choose_icons(entries, infos, easiest, official_only)
+
+  for level = 1, level_count do
+    local added
+
+    if level_count == 1 then
+      added = #extra
+    else
+      added = math.floor(
+        (level - 1) * #extra / (level_count - 1) + 0.5
+      )
+    end
+
+    local set = {}
+    for pack in pairs(easiest.packs) do
+      set[pack] = true
+    end
+
+    for i = 1, added do
+      set[extra[i]] = true
+    end
+
+    local packs = sorted_packs(set)
+    local prerequisites, seen = {}, {}
+
+    local function add_prerequisite(name)
+      if name and not seen[name] then
+        seen[name] = true
+        prerequisites[#prerequisites + 1] = name
+      end
+    end
+
+    if level == 1 then
+      add_prerequisite(plan.unlock_prerequisite)
+    end
+
+    for _, pack in ipairs(packs) do
+      local pack_tech = unlock_tech_for_pack(pack)
+      if pack_tech then
+        add_prerequisite(pack_tech.name)
+      end
+    end
+
+    local ingredients = {}
+    for _, pack in ipairs(packs) do
+      ingredients[#ingredients + 1] = { pack, 1 }
+    end
+
+    plan.levels[level] = {
+      ingredients = ingredients,
+      prerequisites = prerequisites,
+      count = math.max(
+        1,
+        math.floor(cost.base_count * (cost.growth ^ (level - 1)) + 0.5)
+      ),
+      time = cost.time,
+    }
+  end
+
+  return plan
+end
+
+return M
