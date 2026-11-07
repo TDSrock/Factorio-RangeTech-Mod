@@ -281,26 +281,61 @@ end)
 
 ---------------------------------------------------------------------------
 -- Sweep: a script can create a turret without raising a build event (for example
--- surface.create_entity without raise_built). Nothing can hook that, so every few seconds the
--- normal (not upgraded) turrets of researched categories are looked up and upgraded.
--- Interval: runtime setting "rangetech-sweep-interval" (seconds, 0 = off).
+-- surface.create_entity without raise_built). Check a limited number of chunks per timer event.
 ---------------------------------------------------------------------------
 
 local function sweep()
   if storage.paused then return end
+
+  local forces = {}
+  local researched = {}
   for _, force in pairs(game.forces) do
-    local names = {}
-    for category, bases in pairs(category_bases) do
+    local has_research = false
+    for category in pairs(category_bases) do
       if get_level(force, category) > 0 then
-        for _, name in ipairs(bases) do names[#names + 1] = name end
+        researched[category] = true
+        has_research = true
       end
     end
-    if #names > 0 then
-      for _, surface in pairs(game.surfaces) do
-        for _, entity in pairs(surface.find_entities_filtered({ name = names, force = force })) do
-          normalize(entity)
-        end
+    if has_research then forces[#forces + 1] = force end
+  end
+  if #forces == 0 then
+    storage.sweep = nil
+    return
+  end
+
+  local names = {}
+  for category in pairs(researched) do
+    for _, name in ipairs(category_bases[category]) do names[#names + 1] = name end
+  end
+
+  -- Store LuaObjects so the current pass can continue after saving and loading.
+  if not storage.sweep then
+    local surfaces = {}
+    for _, surface in pairs(game.surfaces) do surfaces[#surfaces + 1] = surface end
+    storage.sweep = { surfaces = surfaces, surface_index = 1 }
+  end
+  local pass = storage.sweep
+  local remaining = settings.global["rangetech-sweep-chunks-per-event"].value
+  local filter = { name = names, force = forces }
+  while remaining > 0 do
+    local surface = pass.surfaces[pass.surface_index]
+    if not surface then
+      storage.sweep = nil
+      return
+    end
+
+    if surface.valid and not pass.chunks then pass.chunks = surface.get_chunks() end
+    local chunk = pass.chunks and pass.chunks.valid and pass.chunks()
+    if chunk then
+      remaining = remaining - 1
+      if surface.is_chunk_generated(chunk) then
+        filter.area = chunk.area
+        for _, entity in pairs(surface.find_entities_filtered(filter)) do normalize(entity) end
       end
+    else
+      pass.surface_index = pass.surface_index + 1
+      pass.chunks = nil
     end
   end
 end
@@ -322,7 +357,10 @@ end
 register_sweep()
 
 script.on_event(defines.events.on_runtime_mod_setting_changed, function(event)
-  if event.setting == "rangetech-sweep-interval" then register_sweep() end
+  if event.setting == "rangetech-sweep-interval" then
+    if settings.global["rangetech-sweep-interval"].value == 0 then storage.sweep = nil end
+    register_sweep()
+  end
 end)
 
 ---------------------------------------------------------------------------
@@ -357,7 +395,10 @@ if next(cfg.variants) then
 end
 
 script.on_init(refresh_all)
-script.on_configuration_changed(refresh_all)
+script.on_configuration_changed(function()
+  storage.sweep = nil
+  refresh_all()
+end)
 
 -- Remind players when upgrades are paused (see /range-tech-prep-uninstall).
 script.on_event(defines.events.on_player_joined_game, function(event)
@@ -527,6 +568,7 @@ commands.add_command("range-tech-prep-uninstall", { "rangetech.uninstall-help" }
 
   -- Paused first, so the replacements below are not swapped back to variants.
   storage.paused = true
+  storage.sweep = nil
 
   local names = {}
   for name in pairs(cfg.variants) do names[#names + 1] = name end
