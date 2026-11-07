@@ -52,6 +52,9 @@ Each category (except Ignored) gets its own chain of range researches:
 - Every level costs more than the previous one (default: 100 packs, growing 1.5x per level).
 - Each level adds a flat number of tiles or a percentage of the turret's base range.
 
+Research changes update the affected turrets immediately across all surfaces. Range Tech then
+reports how many turrets changed.
+
 ## Modded turrets
 
 Turrets that this mod cannot work with are put in **Ignored** on purpose, with the reason stored
@@ -104,23 +107,31 @@ The longer-range copies are an internal detail. Everything you carry around is t
 Only a turret that is standing in the world is a copy (it has to be: the range is part of the
 prototype). Mods and tools that look for turrets by name will see the copy's name.
 
-## Removing the mod
+## Changing startup settings or removing the mod
 
-Upgraded turrets use Range Tech prototypes, which Factorio removes when it loads a save without the
-mod. With Range Tech still enabled, run `/range-tech-prep-uninstall` as an admin to restore the
-original turrets and pause upgrades. Save the game, then disable or remove the mod and load that
-prepared save. If you keep the mod, `/range-tech-resume` turns upgrades back on and reapplies your
-researched range bonuses.
+Upgraded turrets use Range Tech prototypes. Factorio can remove those entities when you load a save
+after lowering the number of levels, excluding a turret, or removing the mod.
+
+1. With your current mods and startup settings still in place, run `/range-tech disable` as an
+   admin. This restores the original turrets, pauses upgrades, and checks for any remaining variants.
+2. Once the command confirms no upgraded turrets remain, save the game. If it reports failures,
+   check `factorio-current.log` for the affected turrets before proceeding.
+3. Change the startup settings or remove the mod, then load the prepared save.
+4. If you kept Range Tech, run `/range-tech enable` to reapply available researched bonuses.
 
 ## Commands
 
-- `/range-tech` (or `/rangetech`): shows your research level per category and writes the full
+- `/range-tech` shows the installed version and a short description.
+- `/range-tech help` or `/range-tech ?` lists the available actions.
+- `/range-tech report` (or `/rangetech`) shows your research level per category and writes the full
   details to `script-output/range-tech-report.txt` in your Factorio user data folder: settings,
   every category with its turrets, base range and range per level, why each turret is in its
   category, why ignored turrets are ignored, the research plan (units, time, science packs per
   level) and warnings.
-- `/range-tech-prep-uninstall`: see above (admins only).
-- `/range-tech-resume`: see above (admins only).
+- `/range-tech disable` (or `/range-tech-prep-uninstall`) restores the original turrets and pauses
+  upgrades. Admin only.
+- `/range-tech enable` (or `/range-tech-resume`) reapplies researched bonuses and resumes upgrades.
+  Admin only.
 
 ## Turrets placed by scripts
 
@@ -141,8 +152,6 @@ copy when research completes or a turret is built.
 
 - Copies are made in `data-final-fixes`. A mod that changes turrets *after* this mod in the same
   stage will not be reflected in the copies. If that happens, adjust load order.
-- Changing the settings or the turret mods in an existing save replaces or removes the copies;
-  turrets are re-checked on configuration change.
 - Rewriting a blueprint rebuilds it. Wires to entities *outside* a cut selection are not kept for
   the turrets in it, and other mods that read the blueprint mapping after this mod may find it
   empty.

@@ -1,5 +1,6 @@
 -- Runtime: swaps turrets for the variant that matches the force's range research,
 -- keeping quality, ammo, fluids, health, kills and settings.
+local mod_commands = require("lib.mod_commands")
 local config
 
 local function get_config()
@@ -182,6 +183,7 @@ end
 local function replace(entity, new_name)
   local surface = entity.surface
   local position = entity.position
+  local old_name = entity.name
   local state = save_state(entity)
 
   local new_entity = surface.create_entity({
@@ -198,11 +200,13 @@ local function replace(entity, new_name)
 
   if new_entity and new_entity.valid then
     restore_state(new_entity, state)
-  else
-    -- Replacement failed: keep the original and drop the temporary copy.
-    if state.ammo then state.ammo.destroy() end
-    log("[range-tech] could not replace " .. tostring(entity.valid and entity.name) .. " with " .. new_name)
+    return true
   end
+
+  if state.ammo then state.ammo.destroy() end
+  log(string.format("[range-tech] could not replace %s with %s on %s at (%g, %g)",
+    old_name, new_name, surface.name, position.x, position.y))
+  return false
 end
 
 local function normalize(entity)
@@ -213,18 +217,20 @@ local function normalize(entity)
 
   local target = get_level(entity.force, cfg.turrets[base].category)
   if target ~= current then
-    replace(entity, variant_name(base, target))
+    return replace(entity, variant_name(base, target))
   end
 end
 
 local function refresh_category(force, category)
   local names = category_entities[category]
-  if not names or #names == 0 then return end
+  if storage.paused or not names then return 0 end
+  local changed = 0
   for _, surface in pairs(game.surfaces) do
     for _, entity in pairs(surface.find_entities_filtered({ name = names, force = force })) do
-      normalize(entity)
+      if normalize(entity) then changed = changed + 1 end
     end
   end
+  return changed
 end
 
 local function refresh_force(force)
@@ -269,7 +275,10 @@ end
 local function on_research_changed(event)
   local tech = event.research
   local category = cfg.techs[tech.name]
-  if category then refresh_category(tech.force, category) end
+  if not category or storage.paused then return end
+  local force = tech.force
+  local changed = refresh_category(force, category)
+  force.print({ "rangetech.research-updated", tech.localised_name, changed })
 end
 
 script.on_event(defines.events.on_research_finished, on_research_changed)
@@ -420,10 +429,7 @@ local CATEGORY_ORDER = {
 
 local REPORT_FILE = "range-tech-report.txt"
 
-local function reply(command, message)
-  local player = command.player_index and game.get_player(command.player_index)
-  if player then player.print(message) else game.print(message) end
-end
+local reply = mod_commands.reply
 
 local function is_allowed(command)
   local player = command.player_index and game.get_player(command.player_index)
@@ -555,12 +561,8 @@ local function report_command(command)
   end
 end
 
-commands.add_command("range-tech", { "rangetech.command-help" }, report_command)
-commands.add_command("rangetech", { "rangetech.command-help" }, report_command)
-
--- Removing the mod: variants disappear from a save when the mod is removed, so turn them
--- back into normal turrets first (admins only).
-commands.add_command("range-tech-prep-uninstall", { "rangetech.uninstall-help" }, function(command)
+-- Restore base turrets before removing the mod or changing which variants it generates.
+local function disable_command(command)
   if not is_allowed(command) then
     reply(command, { "rangetech.cmd-admin-only" })
     return
@@ -574,23 +576,36 @@ commands.add_command("range-tech-prep-uninstall", { "rangetech.uninstall-help" }
   for name in pairs(cfg.variants) do names[#names + 1] = name end
 
   local count = 0
+  local failed = 0
+  local remaining = 0
   if #names > 0 then
+    local filter = { name = names }
     for _, surface in pairs(game.surfaces) do
-      for _, entity in pairs(surface.find_entities_filtered({ name = names })) do
-        local variant = cfg.variants[entity.name]
-        if variant and entity.valid then
-          replace(entity, variant.base)
-          count = count + 1
+      for _, entity in pairs(surface.find_entities_filtered(filter)) do
+        local variant = entity.valid and cfg.variants[entity.name]
+        if variant then
+          if replace(entity, variant.base) then
+            count = count + 1
+          else
+            failed = failed + 1
+          end
         end
       end
     end
+    for _, surface in pairs(game.surfaces) do
+      remaining = remaining + surface.count_entities_filtered(filter)
+    end
   end
 
-  reply(command, { "rangetech.cmd-reverted", count })
-end)
+  if failed > 0 or remaining > 0 then
+    reply(command, { "rangetech.cmd-revert-incomplete", count, failed, remaining })
+  else
+    reply(command, { "rangetech.cmd-reverted", count })
+  end
+end
 
 -- Turns range upgrades back on and upgrades every turret that is not at its research level yet.
-commands.add_command("range-tech-resume", { "rangetech.resume-help" }, function(command)
+local function enable_command(command)
   if not is_allowed(command) then
     reply(command, { "rangetech.cmd-admin-only" })
     return
@@ -598,4 +613,10 @@ commands.add_command("range-tech-resume", { "rangetech.resume-help" }, function(
   storage.paused = false
   refresh_all()
   reply(command, { "rangetech.cmd-resumed" })
-end)
+end
+
+mod_commands.register({
+  { name = "report", alias = "rangetech", help = { "rangetech.command-help" }, run = report_command },
+  { name = "disable", alias = "range-tech-prep-uninstall", help = { "rangetech.uninstall-help" }, run = disable_command },
+  { name = "enable", alias = "range-tech-resume", help = { "rangetech.resume-help" }, run = enable_command },
+})
