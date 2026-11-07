@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.0.0
+Date: 07. 11. 2026
+  Features:
+    - Add version and help to /range-tech, with report, disable, and enable actions. Existing standalone commands remain available as aliases. Ease of use:
+    - Report the number of turrets changed when range research completes or is reversed.
+    - Verify that upgraded turrets have been restored before advising players to save for a startup setting change or mod removal.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.3
 Date: 07. 11. 2026
   Graphics:
