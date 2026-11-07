@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.3
+Date: 07. 11. 2026
+  Graphics:
+    - Add a Range Tech mod thumbnail.
+  Optimizations:
+    - Split the periodic turret upgrade sweep into batches to reduce lag spikes on large saves.
+      The new "Upgrade sweep chunks per event" setting caps each batch at 128 map chunks by default.
+      The existing "Upgrade sweep interval" setting controls the time between batches
+      (10 seconds by default, 0 disables the sweep).
+---------------------------------------------------------------------------------------------------
 Version: 0.1.2
 Date: 23. 10. 2026
   Bugfixes:
