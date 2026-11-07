@@ -106,11 +106,11 @@ prototype). Mods and tools that look for turrets by name will see the copy's nam
 
 ## Removing the mod
 
-Copies that are standing in a save disappear when the mod is removed. Before removing it, run
-`/range-tech-prep-uninstall` (admins only). It turns every turret back into its normal version and
-pauses range upgrades, also after saving and loading (players who join get a reminder).
-`/range-tech-resume` turns upgrades back on and upgrades every turret that is not at its research
-level yet.
+Upgraded turrets use Range Tech prototypes, which Factorio removes when it loads a save without the
+mod. With Range Tech still enabled, run `/range-tech-prep-uninstall` as an admin to restore the
+original turrets and pause upgrades. Save the game, then disable or remove the mod and load that
+prepared save. If you keep the mod, `/range-tech-resume` turns upgrades back on and reapplies your
+researched range bonuses.
 
 ## Commands
 
@@ -125,10 +125,12 @@ level yet.
 ## Turrets placed by scripts
 
 Turrets built normally or by bots are upgraded instantly. A script that creates a turret without
-raising a build event (for example `surface.create_entity` without `raise_built = true`) cannot be
-hooked, so a periodic sweep upgrades the normal turrets of researched categories. The interval is
-the runtime setting "Upgrade sweep interval" (default 10 seconds, 0 = off). Scripts that pass
-`raise_built = true` are upgraded immediately.
+raising a build event (for example `surface.create_entity` without `raise_built = true`) relies on
+the periodic sweep. **Upgrade sweep interval** sets the time between batches (default 10 seconds,
+0 disables the sweep). **Upgrade sweep chunks per event** caps how many map chunks each batch
+checks across all surfaces (default 128). Each batch resumes where the previous one left off.
+Lowering the chunk limit reduces work per event and increases the time it takes to cover the map.
+Scripts that pass `raise_built = true` get immediate upgrades.
 
 ## How it works / limitations
 
@@ -200,11 +202,10 @@ install it directly through the in-game mod portal.
 2. Add a `FACTORIO_API_KEY` secret in the repo's
    Settings -> Secrets and variables -> Actions (create the key at
    factorio.com/profile).
-3. Add `thumbnail.png` (144x144) to the repo root.
-4. The `FACTORIO_API_KEY` needs the "ModPortal: Upload Mods" usage and, so the
+3. The `FACTORIO_API_KEY` needs the "ModPortal: Upload Mods" usage and, so the
    very first release can create the mod listing, also "ModPortal: Publish
    Mods" (both are chosen when creating the key on factorio.com/profile).
-5. Every PR needs a `Changelog:` section in its description (see "PR
+4. Every PR needs a `Changelog:` section in its description (see "PR
    Changelog" below).
 
 ---

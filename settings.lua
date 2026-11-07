@@ -95,8 +95,7 @@ for index, id in ipairs(categories.IDS) do
   }
 end
 
--- Runtime setting: how often (seconds) turrets that a script placed without raising a build
--- event are found and upgraded. 0 turns the sweep off.
+-- Runtime sweep settings for turrets placed by scripts without a build event.
 extend[#extend + 1] = {
   type = "int-setting",
   name = "rangetech-sweep-interval",
@@ -104,7 +103,16 @@ extend[#extend + 1] = {
   default_value = 10,
   minimum_value = 0,
   maximum_value = 600,
-  order = "e-sweep",
+  order = "e-sweep-a",
+}
+
+extend[#extend + 1] = {
+  type = "int-setting",
+  name = "rangetech-sweep-chunks-per-event",
+  setting_type = "runtime-global",
+  default_value = 128,
+  minimum_value = 1,
+  order = "e-sweep-b",
 }
 
 data:extend(extend)
