@@ -73,12 +73,28 @@ Laser, acid turrets as Acid, medic turrets as Support, capsule turrets as Grenad
 
 ## Settings (startup)
 
-- **Preset**: `Percent` (+10% of base range per level, all categories), `Flat tiles` (+3 tiles per
-  level, all categories) or `Custom`. The individual "Custom" settings (levels, bonus type, bonus
-  amount per category, plus cost base, growth and research time) only apply to `Custom`.
+- **Preset** applies a ready-made range progression to every supported category. The individual
+  "Custom" settings (levels, bonus type, bonus amount per category, plus cost base, growth and
+  research time) apply when you select `Custom`.
 - **Category overrides**: move turrets between categories, e.g. `gun-turret=laser;
   some-modded-turret=ignored`. Categories: `bullet`, `shotgun`, `cannon`, `railgun`, `grenade`, `missile`, `flame`, `laser`,
   `electric`, `cold`, `acid`, `other`, `ignored`. Artillery turrets cannot be reassigned.
+
+| Preset | Bonus per level | Levels | Total bonus |
+| --- | --- | --- | --- |
+| Percent (default) | +10% of base range | 5 | +50% |
+| Flat tiles | +3 tiles | 5 | +15 tiles |
+| Conservative | +5% of base range | 5 | +25% |
+| Long range | +20% of base range | 5 | +100% |
+| Gradual | +5% of base range | 10 | +50% |
+| Expensive | +10% of base range | 5 | +50% |
+
+Expensive costs 500, 1,000, 2,000, 4,000, and 8,000 science units for its five levels.
+The other ready-made presets start at 100 units, with a 1.5x cost multiplier per level.
+All ready-made presets take 30 seconds per unit.
+Gradual spreads the same total range bonus as Percent across ten researches
+and continues the cost growth through level ten, making the full progression more expensive.
+Before switching presets in an existing save, follow the preparation procedure below.
 
 Factorio cannot build a per-turret settings list (the settings stage runs before any turret
 exists), so overrides are one text setting. To see turret names and categories use the

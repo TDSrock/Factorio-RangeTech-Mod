@@ -3,13 +3,13 @@ local presets = require("lib.presets")
 
 local extend = {}
 
--- Preset dropdown: "percent" and "flat" ready-made, "custom" uses the per-category settings below.
+-- Ready-made presets, plus "custom" for the per-category settings below.
 extend[#extend + 1] = {
   type = "string-setting",
   name = "rangetech-preset",
   setting_type = "startup",
   default_value = "percent",
-  allowed_values = { "percent", "flat", "custom" },
+  allowed_values = { "percent", "flat", "conservative", "long-range", "gradual", "expensive", "custom" },
   order = "a-preset",
 }
 
