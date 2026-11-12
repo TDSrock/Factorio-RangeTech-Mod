@@ -61,10 +61,11 @@ function M.load()
     for _, id in ipairs(categories.IDS) do
       config.categories[id] = { levels = p.levels, mode = p.mode, amount = p.amount }
     end
+    local cost = p.cost or presets.cost
     config.cost = {
-      base_count = presets.cost.base_count,
-      growth = presets.cost.growth,
-      time = presets.cost.time,
+      base_count = cost.base_count,
+      growth = cost.growth,
+      time = cost.time,
     }
   end
 
