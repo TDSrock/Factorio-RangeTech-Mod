@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.0.1
+Date: 12. 11. 2026
+  Features:
+    - Add Conservative (+25% over 5 levels), Long range (+100% over 5 levels), and Gradual (+50% over 10 levels) presets.
+    - Add an Expensive preset with the default Percent bonuses, a starting cost of 500 science units, and 2x cost growth per level.
+  Ease of use:
+    - Add individual tooltips explaining each preset's range bonuses, research levels, and costs.
+---------------------------------------------------------------------------------------------------
 Version: 1.0.0
 Date: 07. 11. 2026
   Features:
