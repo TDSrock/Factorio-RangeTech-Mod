@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.0.2
+Date: 15. 11. 2026
+  Bugfixes:
+    - Fixed turrets that use ammo losing the damage bonus from technologies after a range upgrade. The turret damage effects of technologies are now also applied to the hidden range variants of each turret.
+---------------------------------------------------------------------------------------------------
 Version: 1.0.1
 Date: 12. 11. 2026
   Features:
