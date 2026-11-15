@@ -174,6 +174,44 @@ for _, category in ipairs(categories.IDS) do
   end
 end
 
+-- Turret damage bonuses from technologies are "turret-attack" effects, which are tied to ONE turret
+-- prototype name (turret_id). A hidden variant is a different prototype, so without this a turret
+-- loses every such bonus (for example the gun turret bonus of physical damage research) as soon as
+-- range research swaps it for a variant. Copy each effect for every variant of its turret.
+-- Ammo damage bonuses ("ammo-damage") are tied to the ammo category and need no copy.
+local variants_by_base = {}
+for variant_name, info in pairs(mod_data.variants) do
+  local list = variants_by_base[info.base] or {}
+  list[#list + 1] = variant_name
+  variants_by_base[info.base] = list
+end
+for _, list in pairs(variants_by_base) do table.sort(list) end
+
+if next(variants_by_base) then
+  local copied = 0
+  for _, technology in pairs(data.raw["technology"]) do
+    if type(technology.effects) == "table" then
+      local extra = {}
+      for _, effect in ipairs(technology.effects) do
+        local variants = effect.type == "turret-attack" and variants_by_base[effect.turret_id]
+        if variants then
+          for _, name in ipairs(variants) do
+            local copy = table.deepcopy(effect)
+            copy.turret_id = name
+            copy.hidden = true -- keep the technology tooltip free of one line per hidden variant
+            extra[#extra + 1] = copy
+          end
+        end
+      end
+      for _, effect in ipairs(extra) do
+        technology.effects[#technology.effects + 1] = effect
+        copied = copied + 1
+      end
+    end
+  end
+  log("[range-tech] copied " .. copied .. " turret-attack technology effects to turret variants")
+end
+
 data:extend({
   { type = "mod-data", name = "rangetech-config", data = mod_data },
 })
