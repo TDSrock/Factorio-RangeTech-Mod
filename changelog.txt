@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.0.3
+Date: 18. 11. 2026
+  Bugfixes:
+    - Fixed turrets losing deconstruction orders, upgrade orders, pending item requests (for example ammo from a blueprint) and the destructible, minable, operable and active flags when a range upgrade replaced them.
+    - Fixed turret ghosts keeping an outdated range variant. Ghosts are now recreated at the researched level whenever range research changes, so they build the correct turret.
+    - The disable command (/range-tech-prep-uninstall) now also restores turret ghosts, and the restore and resume messages count them, so no ghosts vanish when the variants are removed."
+    - Fixed a compatibility issue with Integrated Orbital Strike System where its orbital kinetic bombarders were treated as turrets, replaced by range variants and stopped working.
+  Compatibility:
+    - Turrets without a range (fired by script, for example orbital weapons) are now ignored. Integrated Orbital Strike System is listed as not compatible, with the reason shown in the report and log. If you already researched a range upgrade with this mod in a save, run /range-tech disable before updating.
+---------------------------------------------------------------------------------------------------
 Version: 1.0.2
 Date: 15. 11. 2026
   Bugfixes:
