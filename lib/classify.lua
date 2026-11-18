@@ -113,6 +113,15 @@ local function classify(proto)
     return known_group, "known turret rule: " .. known_reason
   end
 
+  -- A range of 0 (note: 0 is truthy in Lua, so a plain nil check does not catch it) means the
+  -- turret never aims by itself. Mods use this for turrets that are fired by script, for example
+  -- orbital weapons. A longer range would do nothing for them, and swapping them for a variant
+  -- breaks the mod that tracks them by entity name.
+  local range = proto.attack_parameters and proto.attack_parameters.range
+  if type(range) ~= "number" or range <= 0 then
+    return categories.IGNORED, "not compatible: turret without a range, fired by script"
+  end
+
   local unmapped = {}
   local ap = proto.attack_parameters
 
