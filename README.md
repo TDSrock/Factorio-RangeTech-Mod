@@ -13,7 +13,8 @@ unknown, the main **damage type** it deals is used. Rules, first match wins:
 1. Your override setting.
 2. Artillery turrets are always ignored.
 3. Explicit rules for specific modded turrets (e.g. repair turrets are ignored, their reach is not
-   a normal turret range).
+   a normal turret range), then turrets without a range (range 0, fired by script), which are
+   ignored too.
 4. The ammo category: exact names first, then name fragments, so modded ammo categories such as
    `my-mod-rocket` or `frost-shell` are recognised too. Generic vanilla categories that mods reuse
    for other weapons (`electric` for lasers, `flamethrower` for acid throwers) are refined by the
@@ -66,6 +67,11 @@ and shown by `/rangetech` and in the log. Currently:
   prototype range and this mod's entity swapping do not apply. *Not compatible.*
 - **Repair turrets**: their reach is not a normal turret range.
 - **Universal Turret**: it swaps the turret's weapon type at runtime.
+- **Integrated Orbital Strike System**: its orbital kinetic bombarder is an ammo turret with a range
+  of 0 that never aims. The mod fires it by script and tracks it by exact entity name, so
+  swapping it for a range copy would stop it working. *Not compatible.*
+
+Any other turret with a range of 0 (a turret that is fired by script) is ignored the same way.
 
 Supported as normal turrets: the other Additional Turrets turrets (cannon, rocket, gatling,
 acid thrower, electron beam, advanced laser) and Rampant Arsenal (laser turrets are recognised as

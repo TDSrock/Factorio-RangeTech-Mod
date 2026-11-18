@@ -120,6 +120,11 @@ M.KNOWN_TURRETS = {
   -- Universal Turret changes a turret's weapon type at runtime by swapping entities. The name
   -- is a guess from the mod's name; check the log if it is not picked up.
   { pattern = "uniturret", group = "ignored", reason = "not compatible: turret that another mod swaps at runtime (Universal Turret)" },
+
+  -- Integrated Orbital Strike System: the orbital kinetic bombarder (and its map editor test
+  -- versions) is an ammo turret with range 0 that never aims. The mod fires it by script and
+  -- tracks it by exact entity name, so swapping it for a range variant stops it working.
+  { pattern = "iosys-", group = "ignored", reason = "not compatible: orbital weapon fired by script (Integrated Orbital Strike System)" },
 }
 
 local valid = { [M.IGNORED] = true }
