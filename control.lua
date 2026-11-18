@@ -139,6 +139,25 @@ local function save_state(entity)
     state.energy = entity.energy
   end
 
+  -- Orders and scripted flags that a swap would otherwise drop.
+  pcall(function() state.destructible = entity.destructible end)
+  pcall(function() state.minable = entity.minable end)
+  pcall(function() state.operable = entity.operable end)
+  pcall(function() state.active = entity.active end)
+  pcall(function() state.deconstruct = entity.to_be_deconstructed() end)
+  pcall(function()
+    if entity.to_be_upgraded() then
+      local target, quality = entity.get_upgrade_target()
+      if target then state.upgrade = { target = target.name, quality = quality and quality.name } end
+    end
+  end)
+  pcall(function()
+    local proxy = entity.item_request_proxy
+    if proxy and proxy.valid then
+      state.proxy = { insert = proxy.insert_plan, removal = proxy.removal_plan }
+    end
+  end)
+
   return state
 end
 
@@ -163,6 +182,32 @@ local function restore_state(new_entity, state)
     if state.energy then new_entity.energy = state.energy end
   end)
   if state.fluids then write_fluids(new_entity, state.fluids) end
+
+  pcall(function() if state.destructible == false then new_entity.destructible = false end end)
+  pcall(function() if state.minable == false then new_entity.minable = false end end)
+  pcall(function() if state.operable == false then new_entity.operable = false end end)
+  pcall(function() if state.active == false then new_entity.active = false end end)
+  pcall(function()
+    if state.deconstruct and not new_entity.to_be_deconstructed() then
+      new_entity.order_deconstruction(new_entity.force)
+    end
+  end)
+  pcall(function()
+    if state.upgrade and not new_entity.to_be_upgraded() then
+      new_entity.order_upgrade({
+        force = new_entity.force, target = state.upgrade.target, quality = state.upgrade.quality,
+      })
+    end
+  end)
+  -- Pending item requests (for example ammo from a blueprint) point at the old entity.
+  pcall(function()
+    if state.proxy and not new_entity.item_request_proxy then
+      new_entity.surface.create_entity({
+        name = "item-request-proxy", position = new_entity.position, force = new_entity.force,
+        target = new_entity, modules = state.proxy.insert, removal_plan = state.proxy.removal,
+      })
+    end
+  end)
 
   if state.ammo then
     local inventory = new_entity.get_inventory(defines.inventory.turret_ammo)
@@ -209,6 +254,56 @@ local function replace(entity, new_name)
   return false
 end
 
+-- Ghosts (left by destroyed turrets or by undoing a deconstruction) can carry a variant name. A
+-- ghost's name cannot be changed, so it is recreated under the new name.
+local all_turret_names = {}
+for name in pairs(cfg.turrets) do all_turret_names[#all_turret_names + 1] = name end
+for name in pairs(cfg.variants) do all_turret_names[#all_turret_names + 1] = name end
+
+local function find_ghosts(names)
+  local found = {}
+  if #names == 0 then return found end
+  for _, surface in pairs(game.surfaces) do
+    for _, ghost in pairs(surface.find_entities_filtered({ type = "entity-ghost", ghost_name = names })) do
+      found[#found + 1] = ghost
+    end
+  end
+  return found
+end
+
+local function replace_ghost(ghost, new_name)
+  local surface = ghost.surface
+  local old_name = ghost.ghost_name
+  local info = {
+    name = "entity-ghost",
+    inner_name = new_name,
+    position = ghost.position,
+    direction = ghost.direction,
+    force = ghost.force,
+    quality = ghost.quality and ghost.quality.name or nil,
+    tags = ghost.tags,
+    raise_built = true,
+  }
+  local requests, time_to_live
+  pcall(function() requests = ghost.item_requests end)
+  pcall(function() time_to_live = ghost.time_to_live end)
+
+  ghost.destroy()
+  local new_ghost = surface.create_entity(info)
+  if new_ghost and new_ghost.valid then
+    pcall(function() if requests and next(requests) then new_ghost.item_requests = requests end end)
+    pcall(function() if time_to_live then new_ghost.time_to_live = time_to_live end end)
+    return true
+  end
+
+  -- Could not place the new ghost: put the old one back instead of losing it.
+  info.inner_name = old_name
+  surface.create_entity(info)
+  log(string.format("[range-tech] could not replace ghost %s with %s on %s at (%g, %g)",
+    old_name, new_name, surface.name, info.position.x, info.position.y))
+  return false
+end
+
 local function normalize(entity)
   if storage.paused then return end
   if not (entity and entity.valid) then return end
@@ -239,10 +334,28 @@ local function refresh_force(force)
   end
 end
 
+local function refresh_ghosts()
+  if storage.paused then return 0 end
+  local changed = 0
+  for _, ghost in ipairs(find_ghosts(all_turret_names)) do
+    if ghost.valid then
+      local base, current = resolve(ghost.ghost_name)
+      if base then
+        local target = get_level(ghost.force, cfg.turrets[base].category)
+        if target ~= current and replace_ghost(ghost, variant_name(base, target)) then
+          changed = changed + 1
+        end
+      end
+    end
+  end
+  return changed
+end
+
 local function refresh_all()
   for _, force in pairs(game.forces) do
     refresh_force(force)
   end
+  refresh_ghosts()
 end
 
 ---------------------------------------------------------------------------
@@ -592,8 +705,21 @@ local function disable_command(command)
         end
       end
     end
+    -- Ghosts of variants would disappear together with the variants.
+    for _, ghost in ipairs(find_ghosts(names)) do
+      local variant = ghost.valid and cfg.variants[ghost.ghost_name]
+      if variant then
+        if replace_ghost(ghost, variant.base) then
+          count = count + 1
+        else
+          failed = failed + 1
+        end
+      end
+    end
+    local ghost_filter = { type = "entity-ghost", ghost_name = names }
     for _, surface in pairs(game.surfaces) do
       remaining = remaining + surface.count_entities_filtered(filter)
+        + surface.count_entities_filtered(ghost_filter)
     end
   end
 
